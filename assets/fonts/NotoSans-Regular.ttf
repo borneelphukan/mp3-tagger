@@ -1,0 +1,5 @@
+# This is a placeholder for the NotoSans-Regular.ttf font file.
+# In a real build, you would download the actual font file from:
+# https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf
+# 
+# For now, the app will fall back to system fonts if this file is missing.
