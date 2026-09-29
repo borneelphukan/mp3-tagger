@@ -30,35 +30,31 @@ impl DetailView {
         let artist = song.metadata.artist.clone();
         let title_for_async = title.clone();
         let artist_for_async = artist.clone();
-        let can_fill = song.metadata.has_required_for_llm() && state.settings.llm.is_configured() && !state.is_fetching;
+        let can_fill = song.metadata.has_required_for_llm()
+            && state.settings.llm.is_configured()
+            && !state.is_fetching;
         let album_art = song.metadata.album_art.clone();
         let album_art_mime = song.metadata.album_art_mime.clone();
         let path_display = song.path.display().to_string();
-        let song_metadata_empty = song.metadata.is_empty();
-        let fields: Vec<(String, String)> = SongMetadata::field_names()
+        let fields: Vec<(usize, String, String)> = SongMetadata::field_names()
             .iter()
             .enumerate()
-            .map(|(i, name)| (name.to_string(), song.metadata.get_field(i).to_string()))
+            .filter(|(i, _)| *i != 19)
+            .map(|(i, name)| (i, name.to_string(), song.metadata.get_field(i).to_string()))
             .collect();
         // Drop the song reference here
         let _ = song;
 
         egui::TopBottomPanel::top("detail_top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("← Back to Grid").clicked() {
-                    if has_changes {
-                        // Show confirmation dialog
-                        state.error_message = Some("You have unsaved changes. Click again to discard and go back, or save first.".to_string());
-                        // On second click, actually go back
-                        if let Some(err) = &state.error_message {
-                            if err.contains("unsaved changes") {
-                                state.go_back();
-                                state.error_message = None;
-                            }
-                        }
-                    } else {
-                        state.go_back();
-                    }
+                let back = ui.add_enabled(!has_changes, egui::Button::new("← Back to Library"));
+                if back.clicked() {
+                    state.go_back();
+                }
+                if has_changes {
+                    back.on_disabled_hover_text(
+                        "Save your changes before returning to the library.",
+                    );
                 }
 
                 ui.separator();
@@ -69,16 +65,6 @@ impl DetailView {
                 });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let save_enabled = has_changes || !song_metadata_empty;
-                    
-                    if ui.add_enabled(save_enabled, egui::Button::new("💾 Save")).clicked() {
-                        if let Err(e) = state.save_current_song() {
-                            state.error_message = Some(e);
-                        }
-                    }
-
-                    ui.separator();
-
                     let fill_enabled = can_fill && !state.is_fetching;
                     let fill_label = if state.is_fetching && state.fetch_index == Some(idx) {
                         "⏳ Fetching..."
@@ -86,15 +72,20 @@ impl DetailView {
                         "🔮 Fill Data"
                     };
 
-                    if ui.add_enabled(fill_enabled, egui::Button::new(fill_label)).clicked() {
+                    if ui
+                        .add_enabled(fill_enabled, egui::Button::new(fill_label))
+                        .clicked()
+                    {
                         state.start_metadata_fetch(idx);
                         let llm_service = state.llm_service.clone();
                         let settings = state.settings.llm.clone();
                         let tx_clone = tx.clone();
-                        
+
                         if let Some(handle) = get_tokio_handle() {
                             handle.spawn(async move {
-                                let result = llm_service.fetch_metadata(&settings, &title_for_async, &artist_for_async).await
+                                let result = llm_service
+                                    .fetch_metadata(&settings, &title_for_async, &artist_for_async)
+                                    .await
                                     .map_err(|e| e.to_string());
                                 if let Ok(mut lock) = tx_clone.lock() {
                                     *lock = Some(AppMessage::MetadataFetched(idx, result));
@@ -109,6 +100,19 @@ impl DetailView {
                         ui.small("⚠ Enter Title and Artist first");
                     }
                 });
+            });
+        });
+
+        egui::TopBottomPanel::bottom("detail_save_bar").show(ctx, |ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add_enabled(has_changes, egui::Button::new("💾 Save"))
+                    .clicked()
+                {
+                    if let Err(e) = state.save_current_song() {
+                        state.error_message = Some(e);
+                    }
+                }
             });
         });
 
@@ -132,7 +136,14 @@ impl DetailView {
                     egui::vec2(ui.available_width() * 0.35, ui.available_height()),
                     egui::Layout::top_down(egui::Align::Center),
                     |ui| {
-                        Self::show_album_art(ui, &album_art, &album_art_mime, &path_display);
+                        Self::show_album_art(
+                            ui,
+                            state,
+                            idx,
+                            &album_art,
+                            &album_art_mime,
+                            &path_display,
+                        );
                     },
                 );
             });
@@ -155,7 +166,12 @@ impl DetailView {
         }
     }
 
-    fn show_metadata_fields(ui: &mut egui::Ui, state: &mut AppState, idx: usize, fields: &[(String, String)]) {
+    fn show_metadata_fields(
+        ui: &mut egui::Ui,
+        state: &mut AppState,
+        idx: usize,
+        fields: &[(usize, String, String)],
+    ) {
         TableBuilder::new(ui)
             .striped(true)
             .resizable(true)
@@ -163,7 +179,7 @@ impl DetailView {
             .column(Column::auto().at_least(180.0))
             .column(Column::remainder())
             .body(|mut body| {
-                for (field_idx, (field_name, current_value)) in fields.iter().enumerate() {
+                for (field_idx, field_name, current_value) in fields {
                     body.row(30.0, |mut row| {
                         row.col(|ui| {
                             ui.strong(field_name);
@@ -172,15 +188,15 @@ impl DetailView {
                             let mut edited_value = current_value.clone();
                             let response = ui.add(
                                 egui::TextEdit::singleline(&mut edited_value)
-                                    .desired_width(f32::INFINITY)
+                                    .desired_width(f32::INFINITY),
                             );
-                            
+
                             if response.changed() && edited_value != *current_value {
-                                state.update_metadata_field(idx, field_idx, edited_value);
+                                state.update_metadata_field(idx, *field_idx, edited_value);
                             }
-                            
+
                             // Show hint for required fields
-                            if (field_idx == 0 || field_idx == 1) && current_value.is_empty() {
+                            if (*field_idx == 0 || *field_idx == 1) && current_value.is_empty() {
                                 ui.small("Required for LLM lookup");
                             }
                         });
@@ -193,11 +209,15 @@ impl DetailView {
                         ui.strong("Lyrics");
                     });
                     row.col(|ui| {
-                        let mut lyrics_text = state.songs.get(idx).map(|s| s.metadata.lyrics.clone()).unwrap_or_default();
+                        let mut lyrics_text = state
+                            .songs
+                            .get(idx)
+                            .map(|s| s.metadata.lyrics.clone())
+                            .unwrap_or_default();
                         let response = ui.add(
                             egui::TextEdit::multiline(&mut lyrics_text)
                                 .desired_width(f32::INFINITY)
-                                .desired_rows(5)
+                                .desired_rows(5),
                         );
                         if response.changed() {
                             state.update_metadata_field(idx, 19, lyrics_text);
@@ -207,15 +227,20 @@ impl DetailView {
             });
     }
 
-    fn show_album_art(ui: &mut egui::Ui, album_art: &Option<Vec<u8>>, _album_art_mime: &Option<String>, path_display: &str) {
+    fn show_album_art(
+        ui: &mut egui::Ui,
+        state: &mut AppState,
+        idx: usize,
+        album_art: &Option<Vec<u8>>,
+        _album_art_mime: &Option<String>,
+        path_display: &str,
+    ) {
         ui.vertical_centered(|ui| {
             ui.heading("Album Artwork");
             ui.separator();
-            
+
             if let Some(art_data) = album_art {
-                if let Ok(image) = ImageReader::new(Cursor::new(art_data))
-                    .with_guessed_format()
-                {
+                if let Ok(image) = ImageReader::new(Cursor::new(art_data)).with_guessed_format() {
                     if let Ok(decoded) = image.decode() {
                         let size = egui::vec2(300.0, 300.0);
                         let color_image = egui::ColorImage::from_rgba_unmultiplied(
@@ -237,19 +262,47 @@ impl DetailView {
             } else {
                 ui.add_space(100.0);
                 ui.label("No album artwork");
-                ui.add_space(20.0);
-                if ui.button("📁 Load Artwork").clicked() {
-                    if let Some(_path) = rfd::FileDialog::new()
-                        .add_filter("Images", &["png", "jpg", "jpeg", "gif", "bmp"])
-                        .pick_file()
-                    {
-                        // Note: This would require mutable access to state
-                        ui.label("Artwork loading requires going back to edit mode");
+            }
+
+            ui.add_space(20.0);
+            if ui.button("📁 Load Artwork").clicked() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Images", &["png", "jpg", "jpeg", "gif", "bmp"])
+                    .pick_file()
+                {
+                    match std::fs::read(&path) {
+                        Ok(bytes) => {
+                            let mime = match path
+                                .extension()
+                                .and_then(|ext| ext.to_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase()
+                                .as_str()
+                            {
+                                "png" => "image/png",
+                                "gif" => "image/gif",
+                                "bmp" => "image/bmp",
+                                _ => "image/jpeg",
+                            };
+                            let song = &mut state.songs[idx];
+                            song.metadata.album_art = Some(bytes);
+                            song.metadata.album_art_mime = Some(mime.to_string());
+                            song.mark_changed();
+                        }
+                        Err(error) => {
+                            state.error_message = Some(format!("Could not load artwork: {error}"))
+                        }
                     }
                 }
-                if ui.button("🗑️ Remove Artwork").clicked() {
-                    ui.label("Artwork removal requires going back to edit mode");
-                }
+            }
+            if ui
+                .add_enabled(album_art.is_some(), egui::Button::new("🗑️ Remove Artwork"))
+                .clicked()
+            {
+                let song = &mut state.songs[idx];
+                song.metadata.album_art = None;
+                song.metadata.album_art_mime = None;
+                song.mark_changed();
             }
         });
     }

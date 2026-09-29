@@ -3,6 +3,7 @@ pub mod grid_view;
 pub mod settings_view;
 pub mod state;
 
+use crate::models::LLMSettings;
 use crate::ui::state::{AppMessage, AppState, View};
 use eframe::egui;
 use std::sync::{Arc, Mutex};
@@ -10,6 +11,8 @@ use std::sync::{Arc, Mutex};
 pub struct Mp3TaggerApp {
     state: AppState,
     message_tx: Arc<Mutex<Option<AppMessage>>>,
+    show_ai_settings: bool,
+    ai_settings_draft: LLMSettings,
 }
 
 impl Mp3TaggerApp {
@@ -21,12 +24,18 @@ impl Mp3TaggerApp {
         let state = AppState::new().expect("Failed to initialize app state");
         let message_tx = Arc::new(Mutex::new(None));
 
-        Self { state, message_tx }
+        let ai_settings_draft = state.settings.llm.clone();
+        Self {
+            state,
+            message_tx,
+            show_ai_settings: false,
+            ai_settings_draft,
+        }
     }
 
     fn setup_style(ctx: &egui::Context) {
         let mut style = (*ctx.style()).clone();
-        
+
         style.visuals.dark_mode = true;
         style.visuals.panel_fill = egui::Color32::from_rgb(28, 28, 30);
         style.visuals.window_fill = egui::Color32::from_rgb(38, 38, 40);
@@ -36,11 +45,11 @@ impl Mp3TaggerApp {
         style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(68, 68, 70);
         style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(78, 78, 80);
         style.visuals.widgets.open.bg_fill = egui::Color32::from_rgb(78, 78, 80);
-        
+
         style.spacing.item_spacing = egui::vec2(8.0, 6.0);
         style.spacing.button_padding = egui::vec2(12.0, 6.0);
         style.spacing.interact_size = egui::vec2(100.0, 28.0);
-        
+
         ctx.set_style(style);
     }
 }
@@ -63,7 +72,9 @@ impl eframe::App for Mp3TaggerApp {
                         self.state.complete_metadata_fetch(idx, result);
                     }
                     AppMessage::SaveSong(idx) => {
-                        if let Err(e) = crate::services::metadata::MetadataService::write_metadata(&mut self.state.songs[idx]) {
+                        if let Err(e) = crate::services::metadata::MetadataService::write_metadata(
+                            &mut self.state.songs[idx],
+                        ) {
                             self.state.error_message = Some(e.to_string());
                         }
                     }
@@ -85,12 +96,16 @@ impl eframe::App for Mp3TaggerApp {
                     AppMessage::TestLlmConnection => {
                         // Handled in settings view
                     }
-                    AppMessage::LlmTestResult(result) => {
-                        match result {
-                            Ok(_) => self.state.error_message = Some("Connection test successful!".to_string()),
-                            Err(e) => self.state.error_message = Some(format!("Connection test failed: {}", e)),
+                    AppMessage::LlmTestResult(result) => match result {
+                        Ok(_) => {
+                            self.state.error_message =
+                                Some("Connection test successful!".to_string())
                         }
-                    }
+                        Err(e) => {
+                            self.state.error_message =
+                                Some(format!("Connection test failed: {}", e))
+                        }
+                    },
                 }
             }
         }
@@ -101,28 +116,13 @@ impl eframe::App for Mp3TaggerApp {
                 ui.menu_button("File", |ui| {
                     if ui.button("Add Songs").clicked() {
                         if let Some(paths) = rfd::FileDialog::new()
-                            .add_filter("Audio Files", &["mp3", "flac", "ogg", "m4a", "wav", "aiff", "ape"])
+                            .add_filter(
+                                "Audio Files",
+                                &["mp3", "flac", "ogg", "m4a", "wav", "aiff", "ape"],
+                            )
                             .pick_files()
                         {
                             self.state.add_songs(paths);
-                        }
-                        ui.close_menu();
-                    }
-                    if ui.button("Add Folder").clicked() {
-                        if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                            let mut audio_files = Vec::new();
-                            if let Ok(entries) = std::fs::read_dir(&folder) {
-                                for entry in entries.flatten() {
-                                    let path = entry.path();
-                                    if let Some(ext) = path.extension() {
-                                        let ext_str = ext.to_string_lossy().to_lowercase();
-                                        if matches!(ext_str.as_str(), "mp3" | "flac" | "ogg" | "m4a" | "wav" | "aiff" | "ape") {
-                                            audio_files.push(path);
-                                        }
-                                    }
-                                }
-                            }
-                            self.state.add_songs(audio_files);
                         }
                         ui.close_menu();
                     }
@@ -134,33 +134,48 @@ impl eframe::App for Mp3TaggerApp {
 
                 ui.menu_button("AI", |ui| {
                     if ui.button("LLM Settings").clicked() {
-                        self.state.current_view = View::Settings;
+                        self.ai_settings_draft = self.state.settings.llm.clone();
+                        self.show_ai_settings = true;
                         ui.close_menu();
                     }
                 });
 
                 ui.menu_button("Help", |ui| {
                     if ui.button("About").clicked() {
-                        self.state.error_message = Some("MP3 Tagger v0.1.0\nNative Rust MP3 Metadata Editor".to_string());
+                        self.state.error_message =
+                            Some("MP3 Tagger v0.1.0\nNative Rust MP3 Metadata Editor".to_string());
                         ui.close_menu();
                     }
                 });
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    match &self.state.current_view {
+                ui.with_layout(
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| match &self.state.current_view {
                         View::Grid => ui.label("📚 Library"),
                         View::Detail(_) => ui.label("🎵 Song Details"),
-                        View::Settings => ui.label("⚙️ Settings"),
-                    }
-                });
+                    },
+                );
             });
         });
 
         // Main content
         match self.state.current_view {
-            View::Grid => crate::ui::grid_view::GridView::show(ctx, &mut self.state, &self.message_tx),
-            View::Detail(_) => crate::ui::detail_view::DetailView::show(ctx, &mut self.state, &self.message_tx),
-            View::Settings => crate::ui::settings_view::SettingsView::show(ctx, &mut self.state, &self.message_tx),
+            View::Grid => {
+                crate::ui::grid_view::GridView::show(ctx, &mut self.state, &self.message_tx)
+            }
+            View::Detail(_) => {
+                crate::ui::detail_view::DetailView::show(ctx, &mut self.state, &self.message_tx)
+            }
+        }
+
+        if self.show_ai_settings {
+            crate::ui::settings_view::SettingsView::show_popup(
+                ctx,
+                &mut self.state,
+                &mut self.ai_settings_draft,
+                &mut self.show_ai_settings,
+                &self.message_tx,
+            );
         }
 
         // Request repaint if fetching

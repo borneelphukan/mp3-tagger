@@ -1,6 +1,6 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct SongMetadata {
@@ -87,15 +87,40 @@ impl SongMetadata {
 
     pub fn field_names() -> &'static [&'static str] {
         &[
-            "Title", "Artist", "Album", "Album Artist", "Year", "Genre",
-            "Track Number", "Total Tracks", "Disc Number", "Total Discs",
-            "Composer", "Lyricist", "Conductor", "Remixer", "Producer",
-            "Arranger", "Engineer", "Mixer", "Comment", "Lyrics",
-            "BPM", "ISRC", "MusicBrainz Track ID", "MusicBrainz Artist ID",
-            "MusicBrainz Album ID", "MusicBrainz Album Artist ID",
-            "MusicBrainz Release Group ID", "MusicBrainz Work ID",
-            "AcoustID Fingerprint", "AcoustID ID", "ReplayGain Track Gain",
-            "ReplayGain Track Peak", "ReplayGain Album Gain", "ReplayGain Album Peak",
+            "Title",
+            "Artist",
+            "Album",
+            "Album Artist",
+            "Year",
+            "Genre",
+            "Track Number",
+            "Total Tracks",
+            "Disc Number",
+            "Total Discs",
+            "Composer",
+            "Lyricist",
+            "Conductor",
+            "Remixer",
+            "Producer",
+            "Arranger",
+            "Engineer",
+            "Mixer",
+            "Comment",
+            "Lyrics",
+            "BPM",
+            "ISRC",
+            "MusicBrainz Track ID",
+            "MusicBrainz Artist ID",
+            "MusicBrainz Album ID",
+            "MusicBrainz Album Artist ID",
+            "MusicBrainz Release Group ID",
+            "MusicBrainz Work ID",
+            "AcoustID Fingerprint",
+            "AcoustID ID",
+            "ReplayGain Track Gain",
+            "ReplayGain Track Peak",
+            "ReplayGain Album Gain",
+            "ReplayGain Album Peak",
         ]
     }
 
@@ -204,11 +229,6 @@ impl Song {
     pub fn mark_changed(&mut self) {
         self.has_changes = true;
         self.last_modified = Utc::now();
-    }
-
-    pub fn reset_changes(&mut self) {
-        self.metadata = self.original_metadata.clone();
-        self.has_changes = false;
     }
 
     pub fn save_changes(&mut self) {

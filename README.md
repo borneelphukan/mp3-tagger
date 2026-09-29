@@ -4,10 +4,10 @@ A native Rust desktop application for editing MP3 metadata with LLM-powered meta
 
 ## Features
 
-- **Grid View**: Browse all your songs in a sortable, filterable table
+- **List and Grid Views**: Browse all your songs in a compact list or metadata table
 - **Detail View**: Edit all metadata fields with album artwork preview
 - **LLM Integration**: Fetch metadata automatically using any OpenAI-compatible API
-- **Batch Operations**: Add multiple songs or entire folders at once
+- **Batch Operations**: Add one or multiple songs at once
 - **Full Metadata Support**: 34+ metadata fields including ID3v2, Vorbis Comments, APE tags
 - **Album Artwork**: View, add, and remove cover art
 - **Cross-Platform**: Native on Linux (Ubuntu) and Windows
@@ -65,11 +65,9 @@ On first run, the app creates a config directory:
 ### LLM Setup
 
 1. Click **AI** → **LLM Settings** in the menu bar
-2. Enable LLM integration
-3. Enter your API key
-4. Specify the model name (e.g., `gpt-4o-mini`, `claude-3-haiku`, `llama3`)
-5. Optionally set a custom base URL for OpenAI-compatible APIs
-6. Click **Save LLM Settings**
+2. Enter your API key and model name (e.g., `gpt-4o-mini`, `claude-3-haiku`, `llama3`)
+3. Optionally set a custom base URL for an OpenAI-compatible API
+4. Click **Save** or **Cancel**
 
 The Fill Data button will be enabled when:
 - LLM is configured
@@ -78,8 +76,8 @@ The Fill Data button will be enabled when:
 
 ## Usage
 
-1. **Add Songs**: Click "Add Songs" or "Add Folder" in the toolbar
-2. **View Details**: Double-click any song in the grid
+1. **Add Songs**: Click "Add Songs" and select one or multiple audio files
+2. **View Details**: Click a song title in either library view
 3. **Edit Metadata**: Modify fields in the detail view
 4. **Fetch Metadata**: Enter Title + Artist, click "Fill Data"
 5. **Save Changes**: Click "Save" to write tags to file

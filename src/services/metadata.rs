@@ -1,8 +1,8 @@
 use crate::models::{AppError, Result, Song, SongMetadata};
+use lofty::file::{AudioFile, TaggedFileExt};
+use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::probe::Probe;
 use lofty::tag::{Accessor, ItemKey, Tag, TagType};
-use lofty::file::{AudioFile, TaggedFileExt};
-use lofty::picture::{Picture, PictureType, MimeType};
 use std::path::Path;
 
 pub struct MetadataService;
@@ -13,9 +13,9 @@ impl MetadataService {
             .map_err(|e| AppError::AudioMetadataParse(e.to_string()))?
             .read()
             .map_err(|e| AppError::AudioMetadataParse(e.to_string()))?;
-        
+
         let mut metadata = SongMetadata::default();
-        
+
         if let Some(tag) = tagged_file.primary_tag() {
             Self::extract_tag_data(tag, &mut metadata);
         } else if let Some(tag) = tagged_file.first_tag() {
@@ -81,12 +81,18 @@ impl MetadataService {
                 ItemKey::UnsyncLyrics => metadata.lyrics = value.to_string(),
                 ItemKey::IntegerBpm => metadata.bpm = value.to_string(),
                 ItemKey::Isrc => metadata.isrc = value.to_string(),
-                ItemKey::MusicBrainzRecordingId => metadata.musicbrainz_track_id = value.to_string(),
+                ItemKey::MusicBrainzRecordingId => {
+                    metadata.musicbrainz_track_id = value.to_string()
+                }
                 ItemKey::MusicBrainzTrackId => metadata.musicbrainz_track_id = value.to_string(),
                 ItemKey::MusicBrainzArtistId => metadata.musicbrainz_artist_id = value.to_string(),
                 ItemKey::MusicBrainzReleaseId => metadata.musicbrainz_album_id = value.to_string(),
-                ItemKey::MusicBrainzReleaseArtistId => metadata.musicbrainz_album_artist_id = value.to_string(),
-                ItemKey::MusicBrainzReleaseGroupId => metadata.musicbrainz_release_group_id = value.to_string(),
+                ItemKey::MusicBrainzReleaseArtistId => {
+                    metadata.musicbrainz_album_artist_id = value.to_string()
+                }
+                ItemKey::MusicBrainzReleaseGroupId => {
+                    metadata.musicbrainz_release_group_id = value.to_string()
+                }
                 ItemKey::MusicBrainzWorkId => metadata.musicbrainz_work_id = value.to_string(),
                 ItemKey::AcoustIdFingerprint => metadata.acoustid_fingerprint = value.to_string(),
                 ItemKey::AcoustId => metadata.acoustid_id = value.to_string(),
@@ -119,14 +125,28 @@ impl MetadataService {
         let primary_tag_type = tagged_file.primary_tag_type();
         let tag = match tagged_file.tag_mut(primary_tag_type) {
             Some(tag) => tag,
-            None => tagged_file.first_tag_mut()
-                .ok_or_else(|| AppError::InvalidMetadata("No writable tag found".to_string()))?
+            None => tagged_file
+                .first_tag_mut()
+                .ok_or_else(|| AppError::InvalidMetadata("No writable tag found".to_string()))?,
         };
 
         Self::write_tag_data(tag, &song.metadata);
 
+        let replace_artwork = song.metadata.album_art != song.original_metadata.album_art;
+        if replace_artwork {
+            // A cleared artwork field must also remove the embedded cover.
+            let picture_count = tag.pictures().len();
+            for _ in 0..picture_count {
+                tag.remove_picture(0);
+            }
+        }
+
         if let Some(art_data) = &song.metadata.album_art {
-            let mime = song.metadata.album_art_mime.as_deref().unwrap_or("image/jpeg");
+            let mime = song
+                .metadata
+                .album_art_mime
+                .as_deref()
+                .unwrap_or("image/jpeg");
             let mime_type = match mime {
                 "image/png" => MimeType::Png,
                 "image/gif" => MimeType::Gif,
@@ -137,11 +157,6 @@ impl MetadataService {
                 .pic_type(PictureType::CoverFront)
                 .mime_type(mime_type)
                 .build();
-            // Remove all existing pictures
-            let picture_count = tag.pictures().len();
-            for _ in 0..picture_count {
-                tag.remove_picture(0);
-            }
             tag.push_picture(picture);
         }
 
@@ -186,19 +201,67 @@ impl MetadataService {
         set_if_not_empty!(tag, ItemKey::UnsyncLyrics, metadata.lyrics);
         set_if_not_empty!(tag, ItemKey::IntegerBpm, metadata.bpm);
         set_if_not_empty!(tag, ItemKey::Isrc, metadata.isrc);
-        set_if_not_empty!(tag, ItemKey::MusicBrainzRecordingId, metadata.musicbrainz_track_id);
-        set_if_not_empty!(tag, ItemKey::MusicBrainzTrackId, metadata.musicbrainz_track_id);
-        set_if_not_empty!(tag, ItemKey::MusicBrainzArtistId, metadata.musicbrainz_artist_id);
-        set_if_not_empty!(tag, ItemKey::MusicBrainzReleaseId, metadata.musicbrainz_album_id);
-        set_if_not_empty!(tag, ItemKey::MusicBrainzReleaseArtistId, metadata.musicbrainz_album_artist_id);
-        set_if_not_empty!(tag, ItemKey::MusicBrainzReleaseGroupId, metadata.musicbrainz_release_group_id);
-        set_if_not_empty!(tag, ItemKey::MusicBrainzWorkId, metadata.musicbrainz_work_id);
-        set_if_not_empty!(tag, ItemKey::AcoustIdFingerprint, metadata.acoustid_fingerprint);
+        set_if_not_empty!(
+            tag,
+            ItemKey::MusicBrainzRecordingId,
+            metadata.musicbrainz_track_id
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::MusicBrainzTrackId,
+            metadata.musicbrainz_track_id
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::MusicBrainzArtistId,
+            metadata.musicbrainz_artist_id
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::MusicBrainzReleaseId,
+            metadata.musicbrainz_album_id
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::MusicBrainzReleaseArtistId,
+            metadata.musicbrainz_album_artist_id
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::MusicBrainzReleaseGroupId,
+            metadata.musicbrainz_release_group_id
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::MusicBrainzWorkId,
+            metadata.musicbrainz_work_id
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::AcoustIdFingerprint,
+            metadata.acoustid_fingerprint
+        );
         set_if_not_empty!(tag, ItemKey::AcoustId, metadata.acoustid_id);
-        set_if_not_empty!(tag, ItemKey::ReplayGainTrackGain, metadata.replaygain_track_gain);
-        set_if_not_empty!(tag, ItemKey::ReplayGainTrackPeak, metadata.replaygain_track_peak);
-        set_if_not_empty!(tag, ItemKey::ReplayGainAlbumGain, metadata.replaygain_album_gain);
-        set_if_not_empty!(tag, ItemKey::ReplayGainAlbumPeak, metadata.replaygain_album_peak);
+        set_if_not_empty!(
+            tag,
+            ItemKey::ReplayGainTrackGain,
+            metadata.replaygain_track_gain
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::ReplayGainTrackPeak,
+            metadata.replaygain_track_peak
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::ReplayGainAlbumGain,
+            metadata.replaygain_album_gain
+        );
+        set_if_not_empty!(
+            tag,
+            ItemKey::ReplayGainAlbumPeak,
+            metadata.replaygain_album_peak
+        );
     }
 
     pub fn load_song(path: &Path) -> Result<Song> {

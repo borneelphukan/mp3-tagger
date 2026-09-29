@@ -8,7 +8,13 @@ use std::path::PathBuf;
 pub enum View {
     Grid,
     Detail(usize),
-    Settings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum LibraryViewMode {
+    #[default]
+    List,
+    Grid,
 }
 
 #[derive(Debug)]
@@ -37,7 +43,9 @@ impl Clone for AppMessage {
             Self::SaveSong(idx) => Self::SaveSong(*idx),
             Self::DeleteSong(idx) => Self::DeleteSong(*idx),
             Self::ChangeView(view) => Self::ChangeView(view.clone()),
-            Self::UpdateMetadata(idx, field, value) => Self::UpdateMetadata(*idx, *field, value.clone()),
+            Self::UpdateMetadata(idx, field, value) => {
+                Self::UpdateMetadata(*idx, *field, value.clone())
+            }
             Self::ToggleFillDataButton(idx) => Self::ToggleFillDataButton(*idx),
             Self::SetError(msg) => Self::SetError(msg.clone()),
             Self::ClearError => Self::ClearError,
@@ -61,13 +69,14 @@ pub struct AppState {
     pub llm_service: LlmService,
     pub settings_service: SettingsService,
     pub pending_changes: bool,
+    pub library_view_mode: LibraryViewMode,
 }
 
 impl AppState {
     pub fn new() -> Result<Self> {
         let settings_service = SettingsService::new().map_err(|e| e.to_string())?;
         let settings = settings_service.load().map_err(|e| e.to_string())?;
-        
+
         Ok(Self {
             songs: Vec::new(),
             current_view: View::Grid,
@@ -79,6 +88,7 @@ impl AppState {
             llm_service: LlmService::new(),
             settings_service,
             pending_changes: false,
+            library_view_mode: LibraryViewMode::List,
         })
     }
 
@@ -91,9 +101,8 @@ impl AppState {
         self.pending_changes = true;
     }
 
-    #[allow(dead_code)]
     pub fn can_go_back(&self) -> bool {
-        matches!(self.current_view, View::Detail(_)) && (!self.pending_changes || self.has_unsaved_changes())
+        matches!(self.current_view, View::Detail(_)) && !self.has_unsaved_changes()
     }
 
     #[allow(dead_code)]
@@ -107,10 +116,8 @@ impl AppState {
     }
 
     pub fn go_back(&mut self) {
-        if let View::Detail(idx) = self.current_view {
-            if idx < self.songs.len() && self.songs[idx].has_changes {
-                self.songs[idx].reset_changes();
-            }
+        if !self.can_go_back() {
+            return;
         }
         self.current_view = View::Grid;
         self.selected_index = None;
@@ -125,7 +132,9 @@ impl AppState {
 
     pub fn update_metadata_field(&mut self, song_index: usize, field_index: usize, value: String) {
         if song_index < self.songs.len() {
-            self.songs[song_index].metadata.set_field(field_index, value);
+            self.songs[song_index]
+                .metadata
+                .set_field(field_index, value);
             self.songs[song_index].mark_changed();
             self.pending_changes = true;
         }
@@ -154,7 +163,7 @@ impl AppState {
     pub fn complete_metadata_fetch(&mut self, index: usize, result: Result<SongMetadata>) {
         self.is_fetching = false;
         self.fetch_index = None;
-        
+
         match result {
             Ok(metadata) => {
                 if index < self.songs.len() {
@@ -163,8 +172,11 @@ impl AppState {
                     self.pending_changes = true;
                 }
             }
-            Err(e) => {
-                self.error_message = Some(e);
+            Err(_) => {
+                self.error_message = Some(
+                    "Could not fetch the song’s metadata. Please enter the metadata manually"
+                        .to_string(),
+                );
             }
         }
     }
@@ -183,7 +195,9 @@ impl AppState {
     }
 
     pub fn save_settings(&mut self) -> Result<()> {
-        self.settings_service.save(&self.settings).map_err(|e| e.to_string())?;
+        self.settings_service
+            .save(&self.settings)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 }
