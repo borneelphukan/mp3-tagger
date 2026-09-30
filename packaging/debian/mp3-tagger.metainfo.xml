@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.borneelphukan.mp3Tagger</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>MP3 Tagger</name>
+  <summary>Edit audio metadata with LLM-powered lookup</summary>
+  <description>
+    <p>
+      MP3 Tagger is a native desktop application for editing metadata of MP3, FLAC,
+      OGG, M4A, WAV, AIFF and APE files. It offers list and grid library views, a
+      detail view covering more than 34 metadata fields, embedded album artwork
+      handling and batch adding of files.
+    </p>
+    <p>
+      Metadata can be filled in automatically through any OpenAI compatible API,
+      so a title and artist are enough to fetch the remaining fields.
+    </p>
+  </description>
+  <launchable type="desktop-id">mp3-tagger.desktop</launchable>
+  <provides>
+    <binary>mp3-tagger</binary>
+  </provides>
+  <developer id="io.github.borneelphukan">
+    <name>borneelphukan</name>
+  </developer>
+  <url type="homepage">https://github.com/borneelphukan/mp3-tagger</url>
+  <url type="bugtracker">https://github.com/borneelphukan/mp3-tagger/issues</url>
+  <content_rating type="oars-1.1" />
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">800</display_length>
+  </requires>
+  <releases>
+    <release version="0.1.0" date="2026-09-30">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

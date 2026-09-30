@@ -244,6 +244,8 @@ impl eframe::App for Mp3TaggerApp {
                 });
 
                 ui.menu_button("View", |ui| {
+                    const THEME_MENU_WIDTH: f32 = 150.0;
+
                     ui.menu_button("Theme", |ui| {
                         for (preference, label) in [
                             (ThemePreference::System, "Default"),
@@ -260,6 +262,11 @@ impl eframe::App for Mp3TaggerApp {
                                 ui.close_menu();
                             }
                         }
+
+                        // Without this the submenu is only as wide as its
+                        // longest label, which looks cramped.
+                        let left = ui.min_rect().left();
+                        ui.expand_to_include_x(left + THEME_MENU_WIDTH);
                     });
                 });
 

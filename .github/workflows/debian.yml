@@ -1,0 +1,237 @@
+name: Debian Package
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - "packaging/**"
+      - "assets/**"
+      - ".github/workflows/debian.yml"
+  workflow_dispatch:
+  schedule:
+    # Rebuild weekly so the apt repository stays available and picks up new
+    # runner images.
+    - cron: "37 5 * * 1"
+
+concurrency:
+  group: debian-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build .deb
+    runs-on: ubuntu-24.04
+    # Needed to attach the .deb to a tagged release.
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from Cargo.toml
+        id: meta
+        run: |
+          version="$(sed -n '0,/^version[[:space:]]*=/s/^version[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version" || { echo "version not found in Cargo.toml" >&2; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "### Debian package $version" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config dpkg-dev desktop-file-utils appstream \
+            libx11-dev libxcb1-dev libxcb-composite0-dev libxcb-cursor-dev \
+            libxcb-image0-dev libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-render0-dev libxcb-render-util0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Build Debian package
+        id: build
+        run: |
+          deb="$(packaging/debian/build-deb.sh | tail -n1)"
+          echo "deb=$(basename "$deb")" >> "$GITHUB_OUTPUT"
+          cp "$deb" dist/
+          dpkg-deb --field "$deb" \
+            Package Version Architecture Depends Installed-Size \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the package layout
+        run: |
+          deb="dist/${{ steps.build.outputs.deb }}"
+          data="$(mktemp -d)"
+          control="$(mktemp -d)"
+          dpkg-deb --extract "$deb" "$data"
+          dpkg-deb --control "$deb" "$control"
+          desktop-file-validate "$data/usr/share/applications/mp3-tagger.desktop"
+          appstreamcli validate --no-net "$data/usr/share/metainfo/mp3-tagger.metainfo.xml"
+          test -x "$data/usr/bin/mp3-tagger"
+          test -s "$data/usr/share/icons/hicolor/256x256/apps/mp3-tagger.png"
+          test -f "$data/usr/share/doc/mp3-tagger/copyright"
+          for script in postinst prerm postrm; do
+            test -x "$control/$script"
+            sh -n "$control/$script"
+          done
+          echo "package layout OK"
+          {
+            echo '```'
+            dpkg-deb --contents "$deb" | awk '{print $1, $6}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -rf "$data" "$control"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-package
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/*.deb
+
+      - name: Attach .deb to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if ! gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            gh release create "${{ github.ref_name }}" \
+              --title "MP3 Tagger ${{ github.ref_name }}" --generate-notes
+          fi
+          gh release upload "${{ github.ref_name }}" dist/*.deb --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-apt:
+    name: Publish apt repository
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the .deb artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: debian-package
+          path: dist
+
+      - name: Prepare signing key material
+        id: key
+        env:
+          PRIVATE_KEY: ${{ secrets.APT_REPO_PRIVATE_KEY }}
+          PASSPHRASE: ${{ secrets.APT_REPO_PASSPHRASE }}
+          KEY_ID: ${{ vars.APT_REPO_KEY_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/apt-signing"
+          if [ -n "$PRIVATE_KEY" ] && [ -n "$KEY_ID" ]; then
+            printf '%s\n' "$PRIVATE_KEY" > "$RUNNER_TEMP/apt-signing/repo-key.asc"
+            chmod 600 "$RUNNER_TEMP/apt-signing/repo-key.asc"
+            if [ -n "$PASSPHRASE" ]; then
+              printf '%s' "$PASSPHRASE" > "$RUNNER_TEMP/apt-signing/passphrase.txt"
+              chmod 600 "$RUNNER_TEMP/apt-signing/passphrase.txt"
+            fi
+            {
+              echo "id=$KEY_ID"
+              echo "key=$RUNNER_TEMP/apt-signing/repo-key.asc"
+              echo "pass=$RUNNER_TEMP/apt-signing/passphrase.txt"
+            } >> "$GITHUB_OUTPUT"
+            echo "Repository will be GPG signed with key \`$KEY_ID\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::APT_REPO_PRIVATE_KEY or APT_REPO_KEY_ID is not configured, publishing an unsigned repository (clients need [trusted=yes])"
+            echo "Repository published **unsigned**: configure the \`APT_REPO_PRIVATE_KEY\` secret and the \`APT_REPO_KEY_ID\` variable." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build the apt repository
+        env:
+          KEY_ID: ${{ steps.key.outputs.id }}
+          KEY_FILE: ${{ steps.key.outputs.key }}
+          PASSPHRASE_FILE: ${{ steps.key.outputs.pass }}
+        run: |
+          mkdir -p pages
+          args=(--debs dist --out pages --suite stable --component main
+                --origin mp3-tagger --label "MP3 Tagger")
+          if [ -n "$KEY_ID" ]; then
+            args+=(--gpg-key-id "$KEY_ID" --gpg-key-file "$KEY_FILE"
+                   --gpg-passphrase-file "$PASSPHRASE_FILE")
+          fi
+          python3 packaging/apt/build-repo.py "${args[@]}"
+
+      - name: Verify the repository metadata
+        run: |
+          test -f pages/apt/dists/stable/Release
+          test -f pages/apt/dists/stable/main/binary-amd64/Packages
+          test -f pages/install.sh
+          sh -n pages/install.sh
+          python3 - pages/apt/dists/stable <<'PY'
+          import hashlib, os, sys
+          base = sys.argv[1]
+          release = open(os.path.join(base, "Release"), encoding="utf-8").read()
+          for field in ("Suite: stable", "Components: main", "Architectures: amd64"):
+              assert field in release, f"Release is missing {field!r}"
+          assert "SHA256:" in release, "Release has no SHA256 section"
+          entries = [
+              line.split()
+              for line in release.split("SHA256:", 1)[1].strip().splitlines()
+          ]
+          assert entries, "SHA256 section is empty"
+          for digest, size, name in entries:
+              blob = open(os.path.join(base, name), "rb").read()
+              assert len(blob) == int(size), f"size mismatch for {name}"
+              assert hashlib.sha256(blob).hexdigest() == digest, f"sha256 mismatch for {name}"
+          if os.path.exists(os.path.join(base, "InRelease")):
+              print("InRelease present")
+          print(f"Release lists {len(entries)} files, every checksum matches")
+          PY
+
+      - name: Configure GitHub Pages
+        id: deployment
+        uses: actions/configure-pages@v5
+
+      - name: Upload the repository to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Show the install command
+        run: |
+          {
+            echo "### Install"
+            echo '```bash'
+            echo "curl -fsSL ${{ steps.deployment.outputs.page_url }}/install.sh | sudo bash"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -2,6 +2,60 @@
 
 A native Rust desktop application for editing MP3 metadata with LLM-powered metadata fetching.
 
+## Installation
+
+Prebuilt packages are published from the [Releases page](https://github.com/borneelphukan/mp3-tagger/releases).
+
+### Ubuntu / Debian
+
+```bash
+curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash
+```
+
+That script adds the signed apt repository, installs `mp3-tagger`, and can be run with flags:
+
+```bash
+curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash -- --print     # show what it will do
+curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash -- --yes       # no prompts
+curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash -- --remove    # uninstall and remove the repository
+```
+
+Afterwards `apt` knows about the package, so later upgrades are just:
+
+```bash
+sudo apt update && sudo apt install --upgrade mp3-tagger
+```
+
+To do it by hand instead:
+
+```bash
+sudo mkdir -p /usr/share/keyrings
+curl -fsSL https://borneelphukan.github.io/mp3-tagger/mp3-tagger-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/mp3-tagger.gpg >/dev/null
+
+sudo tee /etc/apt/sources.list.d/mp3-tagger.sources >/dev/null <<'EOF'
+Types: deb
+URIs: https://borneelphukan.github.io/mp3-tagger/apt/
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/mp3-tagger.gpg
+EOF
+
+sudo apt update
+sudo apt install mp3-tagger
+```
+
+To drop the repository again, delete those two files.
+
+### Windows
+
+Download `MP3Tagger-Setup-<version>.exe` from the releases page and run it. The installer offers
+an optional Start Menu entry, a desktop shortcut, and adding the app to `PATH`; the application
+itself installs to `C:\Program Files\MP3 Tagger`.
+
+A portable build is also attached to each release as `MP3Tagger-<version>-windows-x64.zip`.
+
 ## Features
 
 - **List and Grid Views**: Browse all your songs in a compact list or metadata table
@@ -38,7 +92,7 @@ A native Rust desktop application for editing MP3 metadata with LLM-powered meta
 ### Prerequisites
 
 - Rust 1.75+
-- On Ubuntu: `sudo apt-get install libssl-dev pkg-config libasound2-dev libxcb-composite0-dev libxcb-cursor-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev`
+- On Ubuntu: `sudo apt-get install pkg-config libx11-dev libxcb1-dev libxcb-composite0-dev libxcb-cursor-dev libxcb-image0-dev libxcb-icccm4-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render0-dev libxcb-render-util0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev`
 
 ### Build Commands
 
@@ -52,6 +106,27 @@ cargo build --release
 # Run
 cargo run
 ```
+
+### Packaging
+
+```bash
+# Regenerate assets/icon.png and assets/icon.ico
+
+# Build dist/mp3-tagger_<version>_amd64.deb
+packaging/debian/build-deb.sh
+
+# Build a static apt repository into dist/../pages from the .deb files in dist/
+packaging/apt/build-repo.py --debs dist --out pages --suite stable --component main \
+    --origin mp3-tagger --label "MP3 Tagger"
+
+# Build the NSIS installer (needs makensis and a release build)
+makensis -DAPP_VERSION=0.1.0 -DAPP_VERSION_NUM=0.1.0.0 \
+    -DOUTPUT_NAME=MP3Tagger-Setup-0.1.0.exe installer/mp3-tagger.nsi
+```
+
+Pushing a `v*` tag runs `.github/workflows/windows-installer.yml` and
+`.github/workflows/debian.yml`, which attach the `.exe` and `.deb` to the release and republish the
+apt repository to GitHub Pages.
 
 ## Configuration
 

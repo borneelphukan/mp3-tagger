@@ -45,7 +45,7 @@ impl DetailView {
 
         egui::TopBottomPanel::top("detail_top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let back = ui.button("← Back to Library");
+                let back = ui.button("\u{2039} Back to Library");
                 if back.clicked() {
                     if has_changes {
                         state.confirm_discard_changes = true;

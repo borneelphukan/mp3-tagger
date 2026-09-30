@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=MP3 Tagger
+GenericName=Audio Metadata Editor
+Comment=Edit audio metadata with LLM-powered lookup
+Exec=mp3-tagger
+Icon=mp3-tagger
+Terminal=false
+StartupNotify=true
+StartupWMClass=mp3-tagger
+Categories=AudioVideo;Audio;AudioVideoEditing;Music;
+Keywords=mp3;tag;tagger;metadata;id3;music;audio;flac;ogg;album;artwork;

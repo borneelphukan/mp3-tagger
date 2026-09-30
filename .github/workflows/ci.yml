@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: fmt, clippy and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libx11-dev libxcb1-dev libxcb-composite0-dev libxcb-cursor-dev \
+            libxcb-image0-dev libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-render0-dev libxcb-render-util0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        # never_loop (src/services/metadata.rs) and large_enum_variant
+        # (src/ui/state.rs) are pre-existing findings. Remove these two allows
+        # once they are fixed to turn clippy back into a hard gate.
+        run: |
+          cargo clippy --workspace --all-targets -- \
+            -A clippy::never_loop -A clippy::large_enum_variant
+
+      - name: Tests
+        run: cargo test --workspace --locked
+
+      - name: Release build
+        run: cargo build --release --locked
+
+  linux-assets:
+    name: packaging assets are consistent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate desktop entry
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends desktop-file-utils
+          desktop-file-validate packaging/debian/mp3-tagger.desktop
+
+      - name: Validate AppStream metadata
+        run: |
+          sudo apt-get install -y --no-install-recommends appstream
+          appstreamcli validate --no-net packaging/debian/mp3-tagger.metainfo.xml
+
+      - name: Shell script syntax
+        run: |
+          bash -n packaging/debian/build-deb.sh
+          sh -n packaging/debian/postinst
+          sh -n packaging/debian/prerm
+          sh -n packaging/debian/postrm
+          sh -n packaging/apt/install.sh
+          python3 -m py_compile packaging/apt/build-repo.py

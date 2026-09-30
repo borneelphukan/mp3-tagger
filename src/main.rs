@@ -1,3 +1,8 @@
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 use crate::ui::Mp3TaggerApp;
 use std::sync::Arc;
 
@@ -34,17 +39,13 @@ async fn main() -> Result<(), eframe::Error> {
 }
 
 fn load_icon() -> Option<Arc<egui::IconData>> {
-    // Try to load icon from assets
-    if let Ok(icon_bytes) = std::fs::read("assets/icon.png") {
-        if let Ok(image) = image::load_from_memory(&icon_bytes) {
-            let rgba = image.to_rgba8();
-            let (width, height) = rgba.dimensions();
-            return Some(Arc::new(egui::IconData {
-                rgba: rgba.into_raw(),
-                width,
-                height,
-            }));
-        }
-    }
-    None
+    let icon_bytes = include_bytes!("../assets/icon.png");
+    let image = image::load_from_memory(icon_bytes).ok()?;
+    let rgba = image.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    Some(Arc::new(egui::IconData {
+        rgba: rgba.into_raw(),
+        width,
+        height,
+    }))
 }

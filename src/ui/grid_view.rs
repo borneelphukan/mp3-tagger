@@ -27,7 +27,7 @@ impl GridView {
 
                 ui.separator();
 
-                if ui.button("🗑️ Clear All").clicked() {
+                if ui.button("\u{1F5D1} Clear All").clicked() {
                     state.songs.clear();
                     state.pending_changes = true;
                 }
