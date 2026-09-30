@@ -313,7 +313,7 @@ impl DetailView {
                 }
             }
             if ui
-                .add_enabled(album_art.is_some(), egui::Button::new("🗑️ Remove Artwork"))
+                .add_enabled(album_art.is_some(), egui::Button::new("Remove Artwork"))
                 .clicked()
             {
                 let song = &mut state.songs[idx];

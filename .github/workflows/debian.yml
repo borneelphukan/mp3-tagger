@@ -76,7 +76,6 @@ jobs:
         run: |
           deb="$(packaging/debian/build-deb.sh | tail -n1)"
           echo "deb=$(basename "$deb")" >> "$GITHUB_OUTPUT"
-          cp "$deb" dist/
           dpkg-deb --field "$deb" \
             Package Version Architecture Depends Installed-Size \
             >> "$GITHUB_STEP_SUMMARY"

@@ -8,9 +8,6 @@ pub struct GridView;
 impl GridView {
     pub fn show(ctx: &egui::Context, state: &mut AppState, _tx: &Arc<Mutex<Option<AppMessage>>>) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("MP3 Tagger - Song Library");
-            ui.separator();
-
             // Toolbar
             ui.horizontal(|ui| {
                 if ui.button("➕ Add Songs").clicked() {

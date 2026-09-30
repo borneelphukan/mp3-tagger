@@ -277,13 +277,11 @@ impl eframe::App for Mp3TaggerApp {
                     }
                 });
 
-                ui.with_layout(
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| match &self.state.current_view {
-                        View::Grid => ui.label("📚 Library"),
-                        View::Detail(_) => ui.label("🎵 Song Details"),
-                    },
-                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if matches!(&self.state.current_view, View::Grid) {
+                        ui.label("📚 Library");
+                    }
+                });
             });
         });
 
