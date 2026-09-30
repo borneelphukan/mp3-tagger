@@ -2,7 +2,6 @@ use crate::models::SongMetadata;
 use crate::services::llm::get_tokio_handle;
 use crate::ui::state::{AppMessage, AppState, View};
 use eframe::egui;
-use egui_extras::{Column, TableBuilder};
 use image::ImageReader;
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
@@ -36,6 +35,7 @@ impl DetailView {
         let album_art = song.metadata.album_art.clone();
         let album_art_mime = song.metadata.album_art_mime.clone();
         let path_display = song.path.display().to_string();
+        // Lyrics use a multiline editor below; include every other tag here.
         let fields: Vec<(usize, String, String)> = SongMetadata::field_names()
             .iter()
             .enumerate()
@@ -80,13 +80,42 @@ impl DetailView {
                         let llm_service = state.llm_service.clone();
                         let settings = state.settings.llm.clone();
                         let tx_clone = tx.clone();
+                        let fetch_title = title_for_async.clone();
+                        let fetch_artist = artist_for_async.clone();
 
                         if let Some(handle) = get_tokio_handle() {
                             handle.spawn(async move {
                                 let result = llm_service
-                                    .fetch_metadata(&settings, &title_for_async, &artist_for_async)
+                                    .fetch_metadata(&settings, &fetch_title, &fetch_artist)
                                     .await
                                     .map_err(|e| e.to_string());
+                                let result = match result {
+                                    Ok(mut metadata) => {
+                                        let art_title = if metadata.title.is_empty() {
+                                            &fetch_title
+                                        } else {
+                                            &metadata.title
+                                        };
+                                        let art_artist = if metadata.artist.is_empty() {
+                                            &fetch_artist
+                                        } else {
+                                            &metadata.artist
+                                        };
+                                        if let Ok((bytes, mime)) =
+                                            crate::services::artwork::fetch_cover_art(
+                                                art_title,
+                                                art_artist,
+                                                &metadata.album,
+                                            )
+                                            .await
+                                        {
+                                            metadata.album_art = Some(bytes);
+                                            metadata.album_art_mime = Some(mime);
+                                        }
+                                        Ok(metadata)
+                                    }
+                                    Err(error) => Err(error),
+                                };
                                 if let Ok(mut lock) = tx_clone.lock() {
                                     *lock = Some(AppMessage::MetadataFetched(idx, result));
                                 }
@@ -105,6 +134,9 @@ impl DetailView {
 
         egui::TopBottomPanel::bottom("detail_save_bar").show(ctx, |ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Clear").clicked() {
+                    state.clear_current_metadata();
+                }
                 if ui
                     .add_enabled(has_changes, egui::Button::new("💾 Save"))
                     .clicked()
@@ -117,10 +149,12 @@ impl DetailView {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            let content_width = ui.available_width();
+            let content_height = ui.available_height();
             ui.horizontal(|ui| {
                 // Left panel - Metadata fields
                 ui.allocate_ui_with_layout(
-                    egui::vec2(ui.available_width() * 0.65, ui.available_height()),
+                    egui::vec2(content_width * 0.65, content_height),
                     egui::Layout::top_down(egui::Align::LEFT),
                     |ui| {
                         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -133,7 +167,7 @@ impl DetailView {
 
                 // Right panel - Album artwork
                 ui.allocate_ui_with_layout(
-                    egui::vec2(ui.available_width() * 0.35, ui.available_height()),
+                    egui::vec2(content_width * 0.35, content_height),
                     egui::Layout::top_down(egui::Align::Center),
                     |ui| {
                         Self::show_album_art(
@@ -172,59 +206,38 @@ impl DetailView {
         idx: usize,
         fields: &[(usize, String, String)],
     ) {
-        TableBuilder::new(ui)
-            .striped(true)
-            .resizable(true)
-            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::auto().at_least(180.0))
-            .column(Column::remainder())
-            .body(|mut body| {
-                for (field_idx, field_name, current_value) in fields {
-                    body.row(30.0, |mut row| {
-                        row.col(|ui| {
-                            ui.strong(field_name);
-                        });
-                        row.col(|ui| {
-                            let mut edited_value = current_value.clone();
-                            let response = ui.add(
-                                egui::TextEdit::singleline(&mut edited_value)
-                                    .desired_width(f32::INFINITY),
-                            );
-
-                            if response.changed() && edited_value != *current_value {
-                                state.update_metadata_field(idx, *field_idx, edited_value);
-                            }
-
-                            // Show hint for required fields
-                            if (*field_idx == 0 || *field_idx == 1) && current_value.is_empty() {
-                                ui.small("Required for LLM lookup");
-                            }
-                        });
-                    });
+        ui.vertical(|ui| {
+            for (field_idx, field_name, current_value) in fields {
+                ui.strong(field_name);
+                let mut edited_value = current_value.clone();
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut edited_value).desired_width(f32::INFINITY),
+                );
+                if response.changed() && edited_value != *current_value {
+                    state.update_metadata_field(idx, *field_idx, edited_value);
                 }
-
-                // Lyrics field - multi-line
-                body.row(100.0, |mut row| {
-                    row.col(|ui| {
-                        ui.strong("Lyrics");
-                    });
-                    row.col(|ui| {
-                        let mut lyrics_text = state
-                            .songs
-                            .get(idx)
-                            .map(|s| s.metadata.lyrics.clone())
-                            .unwrap_or_default();
-                        let response = ui.add(
-                            egui::TextEdit::multiline(&mut lyrics_text)
-                                .desired_width(f32::INFINITY)
-                                .desired_rows(5),
-                        );
-                        if response.changed() {
-                            state.update_metadata_field(idx, 19, lyrics_text);
-                        }
-                    });
-                });
-            });
+                if (*field_idx == 0 || *field_idx == 1) && current_value.is_empty() {
+                    ui.small("Required for LLM lookup");
+                }
+                ui.add_space(5.0);
+            }
+            ui.strong("Lyrics");
+            let mut lyrics_text = state
+                .songs
+                .get(idx)
+                .map(|song| song.metadata.lyrics.clone())
+                .unwrap_or_default();
+            if ui
+                .add(
+                    egui::TextEdit::multiline(&mut lyrics_text)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(5),
+                )
+                .changed()
+            {
+                state.update_metadata_field(idx, 19, lyrics_text);
+            }
+        });
     }
 
     fn show_album_art(
@@ -235,30 +248,44 @@ impl DetailView {
         _album_art_mime: &Option<String>,
         path_display: &str,
     ) {
-        ui.vertical_centered(|ui| {
-            ui.heading("Album Artwork");
-            ui.separator();
-
-            if let Some(art_data) = album_art {
-                if let Ok(image) = ImageReader::new(Cursor::new(art_data)).with_guessed_format() {
-                    if let Ok(decoded) = image.decode() {
-                        let size = egui::vec2(300.0, 300.0);
+        let mut art_decode_failed = false;
+        let texture = album_art.as_ref().and_then(|art_data| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            use std::hash::{Hash, Hasher};
+            art_data.hash(&mut hasher);
+            let texture_key = format!("{path_display}-{:x}", hasher.finish());
+            if state.album_art_texture.as_ref().map(|(key, _)| key) != Some(&texture_key) {
+                match ImageReader::new(Cursor::new(art_data))
+                    .with_guessed_format()
+                    .ok()
+                    .and_then(|reader| reader.decode().ok())
+                {
+                    Some(decoded) => {
                         let color_image = egui::ColorImage::from_rgba_unmultiplied(
                             [decoded.width() as usize, decoded.height() as usize],
                             decoded.to_rgba8().as_flat_samples().as_slice(),
                         );
-                        let texture = ui.ctx().load_texture(
-                            format!("album_art_{}", path_display),
-                            color_image,
-                            Default::default(),
-                        );
-                        ui.add(egui::Image::new(&texture).fit_to_exact_size(size));
-                    } else {
-                        ui.label("Failed to decode image");
+                        let handle =
+                            ui.ctx()
+                                .load_texture(&texture_key, color_image, Default::default());
+                        state.album_art_texture = Some((texture_key.clone(), handle));
                     }
-                } else {
-                    ui.label("Failed to load image");
+                    None => art_decode_failed = true,
                 }
+            }
+            state
+                .album_art_texture
+                .as_ref()
+                .map(|(_, texture)| texture.clone())
+        });
+        ui.vertical_centered(|ui| {
+            ui.heading("Album Artwork");
+            ui.separator();
+
+            if let Some(texture) = texture {
+                ui.add(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(300.0, 300.0)));
+            } else if art_decode_failed {
+                ui.label("Failed to load artwork image");
             } else {
                 ui.add_space(100.0);
                 ui.label("No album artwork");
@@ -288,6 +315,7 @@ impl DetailView {
                             song.metadata.album_art = Some(bytes);
                             song.metadata.album_art_mime = Some(mime.to_string());
                             song.mark_changed();
+                            state.pending_changes = true;
                         }
                         Err(error) => {
                             state.error_message = Some(format!("Could not load artwork: {error}"))
@@ -303,6 +331,7 @@ impl DetailView {
                 song.metadata.album_art = None;
                 song.metadata.album_art_mime = None;
                 song.mark_changed();
+                state.pending_changes = true;
             }
         });
     }

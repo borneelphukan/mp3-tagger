@@ -59,7 +59,12 @@ impl LlmService {
         }
     }
 
-    pub async fn fetch_metadata(&self, settings: &LLMSettings, title: &str, artist: &str) -> Result<SongMetadata> {
+    pub async fn fetch_metadata(
+        &self,
+        settings: &LLMSettings,
+        title: &str,
+        artist: &str,
+    ) -> Result<SongMetadata> {
         if !settings.is_configured() {
             return Err(AppError::Llm("LLM not configured".to_string()));
         }
@@ -96,12 +101,6 @@ Return ONLY a valid JSON object with these fields (use empty string "" for unkno
   "lyrics": "",
   "bpm": "",
   "isrc": "",
-  "musicbrainz_track_id": "",
-  "musicbrainz_artist_id": "",
-  "musicbrainz_album_id": "",
-  "musicbrainz_album_artist_id": "",
-  "musicbrainz_release_group_id": "",
-  "musicbrainz_work_id": "",
   "acoustid_fingerprint": "",
   "acoustid_id": "",
   "replaygain_track_gain": "",
@@ -118,7 +117,10 @@ Provide accurate metadata. If you cannot find the song, return empty strings for
     }
 
     async fn call_llm(&self, settings: &LLMSettings, prompt: &str) -> Result<String> {
-        let base_url = settings.base_url.as_deref().unwrap_or("https://api.openai.com/v1");
+        let base_url = settings
+            .base_url
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1");
         let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
         let request = LlmRequest {
@@ -138,7 +140,7 @@ Provide accurate metadata. If you cannot find the song, return empty strings for
         };
 
         let mut req_builder = self.client.post(&url).json(&request);
-        
+
         if !settings.api_key.is_empty() {
             req_builder = req_builder.bearer_auth(&settings.api_key);
         }
@@ -148,11 +150,14 @@ Provide accurate metadata. If you cannot find the song, return empty strings for
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            return Err(AppError::Llm(format!("LLM API error ({}): {}", status, error_text)));
+            return Err(AppError::Llm(format!(
+                "LLM API error ({}): {}",
+                status, error_text
+            )));
         }
 
         let llm_response: LlmResponse = response.json().await?;
-        
+
         Ok(llm_response
             .choices
             .first()
@@ -169,7 +174,9 @@ Provide accurate metadata. If you cannot find the song, return empty strings for
             .map_err(|e| AppError::Llm(format!("Failed to parse LLM response: {}", e)))?;
 
         if metadata.is_empty() {
-            return Err(AppError::SongNotFound("Song not found in LLM database".to_string()));
+            return Err(AppError::SongNotFound(
+                "Song not found in LLM database".to_string(),
+            ));
         }
 
         Ok(metadata)

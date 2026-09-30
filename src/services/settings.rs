@@ -1,4 +1,4 @@
-use crate::models::{AppSettings, AppError, Result};
+use crate::models::{AppError, AppSettings, Result};
 use directories::ProjectDirs;
 use std::fs;
 use std::path::PathBuf;
@@ -14,10 +14,10 @@ impl SettingsService {
     pub fn new() -> Result<Self> {
         let proj_dirs = ProjectDirs::from("", "", APP_NAME)
             .ok_or_else(|| AppError::Config("Could not determine config directory".to_string()))?;
-        
+
         let config_dir = proj_dirs.config_dir().to_path_buf();
         fs::create_dir_all(&config_dir)?;
-        
+
         Ok(Self { config_dir })
     }
 

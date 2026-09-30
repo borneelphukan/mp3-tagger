@@ -26,12 +26,6 @@ pub struct SongMetadata {
     pub lyrics: String,
     pub bpm: String,
     pub isrc: String,
-    pub musicbrainz_track_id: String,
-    pub musicbrainz_artist_id: String,
-    pub musicbrainz_album_id: String,
-    pub musicbrainz_album_artist_id: String,
-    pub musicbrainz_release_group_id: String,
-    pub musicbrainz_work_id: String,
     pub acoustid_fingerprint: String,
     pub acoustid_id: String,
     pub replaygain_track_gain: String,
@@ -66,12 +60,6 @@ impl SongMetadata {
             && self.lyrics.is_empty()
             && self.bpm.is_empty()
             && self.isrc.is_empty()
-            && self.musicbrainz_track_id.is_empty()
-            && self.musicbrainz_artist_id.is_empty()
-            && self.musicbrainz_album_id.is_empty()
-            && self.musicbrainz_album_artist_id.is_empty()
-            && self.musicbrainz_release_group_id.is_empty()
-            && self.musicbrainz_work_id.is_empty()
             && self.acoustid_fingerprint.is_empty()
             && self.acoustid_id.is_empty()
             && self.replaygain_track_gain.is_empty()
@@ -109,12 +97,6 @@ impl SongMetadata {
             "Lyrics",
             "BPM",
             "ISRC",
-            "MusicBrainz Track ID",
-            "MusicBrainz Artist ID",
-            "MusicBrainz Album ID",
-            "MusicBrainz Album Artist ID",
-            "MusicBrainz Release Group ID",
-            "MusicBrainz Work ID",
             "AcoustID Fingerprint",
             "AcoustID ID",
             "ReplayGain Track Gain",
@@ -148,18 +130,12 @@ impl SongMetadata {
             19 => &self.lyrics,
             20 => &self.bpm,
             21 => &self.isrc,
-            22 => &self.musicbrainz_track_id,
-            23 => &self.musicbrainz_artist_id,
-            24 => &self.musicbrainz_album_id,
-            25 => &self.musicbrainz_album_artist_id,
-            26 => &self.musicbrainz_release_group_id,
-            27 => &self.musicbrainz_work_id,
-            28 => &self.acoustid_fingerprint,
-            29 => &self.acoustid_id,
-            30 => &self.replaygain_track_gain,
-            31 => &self.replaygain_track_peak,
-            32 => &self.replaygain_album_gain,
-            33 => &self.replaygain_album_peak,
+            22 => &self.acoustid_fingerprint,
+            23 => &self.acoustid_id,
+            24 => &self.replaygain_track_gain,
+            25 => &self.replaygain_track_peak,
+            26 => &self.replaygain_album_gain,
+            27 => &self.replaygain_album_peak,
             _ => "",
         }
     }
@@ -188,18 +164,12 @@ impl SongMetadata {
             19 => self.lyrics = value,
             20 => self.bpm = value,
             21 => self.isrc = value,
-            22 => self.musicbrainz_track_id = value,
-            23 => self.musicbrainz_artist_id = value,
-            24 => self.musicbrainz_album_id = value,
-            25 => self.musicbrainz_album_artist_id = value,
-            26 => self.musicbrainz_release_group_id = value,
-            27 => self.musicbrainz_work_id = value,
-            28 => self.acoustid_fingerprint = value,
-            29 => self.acoustid_id = value,
-            30 => self.replaygain_track_gain = value,
-            31 => self.replaygain_track_peak = value,
-            32 => self.replaygain_album_gain = value,
-            33 => self.replaygain_album_peak = value,
+            22 => self.acoustid_fingerprint = value,
+            23 => self.acoustid_id = value,
+            24 => self.replaygain_track_gain = value,
+            25 => self.replaygain_track_peak = value,
+            26 => self.replaygain_album_gain = value,
+            27 => self.replaygain_album_peak = value,
             _ => {}
         }
     }
@@ -263,7 +233,15 @@ pub struct LLMSettings {
 
 impl LLMSettings {
     pub fn is_configured(&self) -> bool {
-        self.enabled && !self.api_key.is_empty() && !self.model_name.is_empty()
+        self.enabled
+            && !self.model_name.is_empty()
+            && (!self.api_key.is_empty()
+                || self.base_url.as_deref().is_some_and(|url| {
+                    url.starts_with("http://localhost")
+                        || url.starts_with("http://127.0.0.1")
+                        || url.starts_with("https://localhost")
+                        || url.starts_with("https://127.0.0.1")
+                }))
     }
 }
 
@@ -272,4 +250,14 @@ pub struct AppSettings {
     pub llm: LLMSettings,
     pub last_opened_folder: Option<PathBuf>,
     pub window_size: Option<(f32, f32)>,
+    #[serde(default)]
+    pub theme: ThemePreference,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ThemePreference {
+    Light,
+    Dark,
+    #[default]
+    System,
 }

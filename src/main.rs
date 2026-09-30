@@ -12,11 +12,11 @@ async fn main() -> Result<(), eframe::Error> {
         .with_inner_size([1200.0, 800.0])
         .with_min_inner_size([800.0, 600.0])
         .with_title("MP3 Tagger");
-    
+
     if let Some(icon_data) = icon {
         viewport = viewport.with_icon(icon_data);
     }
-    
+
     let options = eframe::NativeOptions {
         viewport,
         ..Default::default()
@@ -24,7 +24,7 @@ async fn main() -> Result<(), eframe::Error> {
 
     // Set the tokio handle for async tasks
     crate::services::llm::set_tokio_handle(tokio::runtime::Handle::current());
-    
+
     // Run the app
     eframe::run_native(
         "MP3 Tagger",

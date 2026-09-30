@@ -1,6 +1,6 @@
 use crate::ui::state::{AppMessage, AppState, LibraryViewMode};
 use eframe::egui;
-use egui_extras::{Column, TableBuilder};
+use egui_extras::Column;
 use std::sync::{Arc, Mutex};
 
 pub struct GridView;
@@ -71,118 +71,28 @@ impl GridView {
                 .show(ui, |ui| {
                     match state.library_view_mode {
                         LibraryViewMode::List => {
-                            // List view - single column with more details
+                            // List view: metadata columns for scanning the library.
                             egui_extras::TableBuilder::new(ui)
                                 .striped(true)
                                 .resizable(true)
                                 .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                                .column(Column::remainder())
+                                .column(Column::auto().at_least(40.0))
+                                .column(Column::auto().at_least(200.0))
+                                .column(Column::auto().at_least(150.0))
+                                .column(Column::auto().at_least(150.0))
+                                .column(Column::auto().at_least(60.0))
+                                .column(Column::auto().at_least(100.0))
+                                .column(Column::auto().at_least(80.0))
+                                .column(Column::auto().at_least(100.0))
                                 .header(20.0, |mut header| {
-                                    header.col(|ui| {
-                                        ui.strong("Songs");
-                                    });
-                                })
-                                .body(|mut body| {
-                                    for (idx, song) in state.songs.iter().enumerate() {
-                                        body.row(40.0, |mut row| {
-                                            row.col(|ui| {
-                                                ui.horizontal(|ui| {
-                                                    ui.label(format!("{}.", idx + 1));
-                                                    let title = if song.metadata.title.is_empty() {
-                                                        song.file_name()
-                                                    } else {
-                                                        format!(
-                                                            "{} - {}",
-                                                            song.metadata.artist,
-                                                            song.metadata.title
-                                                        )
-                                                    };
-                                                    if ui.selectable_label(false, title).clicked() {
-                                                        clicked_idx = Some(idx);
-                                                    }
-                                                    ui.separator();
-                                                    if !song.metadata.album.is_empty() {
-                                                        ui.label(format!(
-                                                            "💿 {}",
-                                                            song.metadata.album
-                                                        ));
-                                                        ui.separator();
-                                                    }
-                                                    if !song.metadata.year.is_empty() {
-                                                        ui.label(format!(
-                                                            "📅 {}",
-                                                            song.metadata.year
-                                                        ));
-                                                        ui.separator();
-                                                    }
-                                                    if !song.metadata.genre.is_empty() {
-                                                        ui.label(format!(
-                                                            "🎵 {}",
-                                                            song.metadata.genre
-                                                        ));
-                                                        ui.separator();
-                                                    }
-                                                    if song.has_changes {
-                                                        ui.colored_label(
-                                                            egui::Color32::YELLOW,
-                                                            "● Modified",
-                                                        );
-                                                    } else if song.metadata.is_empty() {
-                                                        ui.colored_label(
-                                                            egui::Color32::GRAY,
-                                                            "No metadata",
-                                                        );
-                                                    } else {
-                                                        ui.colored_label(
-                                                            egui::Color32::GREEN,
-                                                            "✓ Saved",
-                                                        );
-                                                    }
-                                                });
-                                            });
+                                    for label in [
+                                        "#", "Title", "Artist", "Album", "Year", "Genre", "Track",
+                                        "Status",
+                                    ] {
+                                        header.col(|ui| {
+                                            ui.strong(label);
                                         });
                                     }
-                                });
-                        }
-                        LibraryViewMode::Grid => {
-                            // Grid view - table with columns
-                            TableBuilder::new(ui)
-                                .striped(true)
-                                .resizable(true)
-                                .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                                .column(Column::auto().at_least(40.0)) // #
-                                .column(Column::auto().at_least(200.0)) // Title
-                                .column(Column::auto().at_least(150.0)) // Artist
-                                .column(Column::auto().at_least(150.0)) // Album
-                                .column(Column::auto().at_least(60.0)) // Year
-                                .column(Column::auto().at_least(100.0)) // Genre
-                                .column(Column::auto().at_least(80.0)) // Track
-                                .column(Column::auto().at_least(100.0)) // Status
-                                .header(20.0, |mut header| {
-                                    header.col(|ui| {
-                                        ui.strong("#");
-                                    });
-                                    header.col(|ui| {
-                                        ui.strong("Title");
-                                    });
-                                    header.col(|ui| {
-                                        ui.strong("Artist");
-                                    });
-                                    header.col(|ui| {
-                                        ui.strong("Album");
-                                    });
-                                    header.col(|ui| {
-                                        ui.strong("Year");
-                                    });
-                                    header.col(|ui| {
-                                        ui.strong("Genre");
-                                    });
-                                    header.col(|ui| {
-                                        ui.strong("Track");
-                                    });
-                                    header.col(|ui| {
-                                        ui.strong("Status");
-                                    });
                                 })
                                 .body(|mut body| {
                                     for (idx, song) in state.songs.iter().enumerate() {
@@ -246,6 +156,45 @@ impl GridView {
                                                 }
                                             });
                                         });
+                                    }
+                                });
+                        }
+                        LibraryViewMode::Grid => {
+                            // Desktop style: uniform song icons laid out in rows.
+                            let tile_width = 112.0;
+                            let columns =
+                                (ui.available_width() / tile_width).floor().max(1.0) as usize;
+                            egui::Grid::new("song_desktop_grid")
+                                .num_columns(columns)
+                                .spacing(egui::vec2(12.0, 18.0))
+                                .show(ui, |ui| {
+                                    for (idx, song) in state.songs.iter().enumerate() {
+                                        let title = if song.metadata.title.is_empty() {
+                                            song.file_name()
+                                        } else {
+                                            song.metadata.title.clone()
+                                        };
+                                        ui.vertical_centered(|ui| {
+                                            let icon = ui.add_sized(
+                                                [72.0, 72.0],
+                                                egui::Button::new(
+                                                    egui::RichText::new("♫").size(42.0),
+                                                ),
+                                            );
+                                            if icon.clicked() {
+                                                clicked_idx = Some(idx);
+                                            }
+                                            let label = ui.add_sized(
+                                                [tile_width, 36.0],
+                                                egui::Label::new(title).truncate().wrap(),
+                                            );
+                                            if label.interact(egui::Sense::click()).clicked() {
+                                                clicked_idx = Some(idx);
+                                            }
+                                        });
+                                        if (idx + 1) % columns == 0 {
+                                            ui.end_row();
+                                        }
                                     }
                                 });
                         }

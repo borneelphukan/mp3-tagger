@@ -3,7 +3,7 @@ pub mod grid_view;
 pub mod settings_view;
 pub mod state;
 
-use crate::models::LLMSettings;
+use crate::models::{LLMSettings, ThemePreference};
 use crate::ui::state::{AppMessage, AppState, View};
 use eframe::egui;
 use std::sync::{Arc, Mutex};
@@ -13,49 +13,54 @@ pub struct Mp3TaggerApp {
     message_tx: Arc<Mutex<Option<AppMessage>>>,
     show_ai_settings: bool,
     ai_settings_draft: LLMSettings,
+    ai_settings_local_mode: bool,
 }
 
 impl Mp3TaggerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Use system fonts (font loading disabled for now due to placeholder font file)
-        // Set up visual style
-        Self::setup_style(&cc.egui_ctx);
-
         let state = AppState::new().expect("Failed to initialize app state");
+        Self::setup_style(&cc.egui_ctx);
+        Self::apply_theme(&cc.egui_ctx, state.settings.theme);
         let message_tx = Arc::new(Mutex::new(None));
 
         let ai_settings_draft = state.settings.llm.clone();
+        let ai_settings_local_mode = state
+            .settings
+            .llm
+            .base_url
+            .as_deref()
+            .is_some_and(|url| url.contains("localhost") || url.contains("127.0.0.1"));
         Self {
             state,
             message_tx,
             show_ai_settings: false,
             ai_settings_draft,
+            ai_settings_local_mode,
         }
     }
 
     fn setup_style(ctx: &egui::Context) {
-        let mut style = (*ctx.style()).clone();
+        for theme in [egui::Theme::Light, egui::Theme::Dark] {
+            ctx.style_mut_of(theme, |style| {
+                style.spacing.item_spacing = egui::vec2(8.0, 6.0);
+                style.spacing.button_padding = egui::vec2(12.0, 6.0);
+                style.spacing.interact_size = egui::vec2(100.0, 28.0);
+            });
+        }
+    }
 
-        style.visuals.dark_mode = true;
-        style.visuals.panel_fill = egui::Color32::from_rgb(28, 28, 30);
-        style.visuals.window_fill = egui::Color32::from_rgb(38, 38, 40);
-        style.visuals.extreme_bg_color = egui::Color32::from_rgb(48, 48, 50);
-        style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(48, 48, 50);
-        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(58, 58, 60);
-        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(68, 68, 70);
-        style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(78, 78, 80);
-        style.visuals.widgets.open.bg_fill = egui::Color32::from_rgb(78, 78, 80);
-
-        style.spacing.item_spacing = egui::vec2(8.0, 6.0);
-        style.spacing.button_padding = egui::vec2(12.0, 6.0);
-        style.spacing.interact_size = egui::vec2(100.0, 28.0);
-
-        ctx.set_style(style);
+    fn apply_theme(ctx: &egui::Context, theme: ThemePreference) {
+        ctx.set_theme(match theme {
+            ThemePreference::Light => egui::ThemePreference::Light,
+            ThemePreference::Dark => egui::ThemePreference::Dark,
+            ThemePreference::System => egui::ThemePreference::System,
+        });
     }
 }
 
 impl eframe::App for Mp3TaggerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        Self::apply_theme(ctx, self.state.settings.theme);
         // Process messages
         if let Ok(mut lock) = self.message_tx.lock() {
             if let Some(msg) = lock.take() {
@@ -135,9 +140,38 @@ impl eframe::App for Mp3TaggerApp {
                 ui.menu_button("AI", |ui| {
                     if ui.button("LLM Settings").clicked() {
                         self.ai_settings_draft = self.state.settings.llm.clone();
+                        self.ai_settings_local_mode = self
+                            .state
+                            .settings
+                            .llm
+                            .base_url
+                            .as_deref()
+                            .is_some_and(|url| {
+                                url.contains("localhost") || url.contains("127.0.0.1")
+                            });
                         self.show_ai_settings = true;
                         ui.close_menu();
                     }
+                });
+
+                ui.menu_button("View", |ui| {
+                    ui.menu_button("Theme", |ui| {
+                        for (preference, label) in [
+                            (ThemePreference::System, "Default"),
+                            (ThemePreference::Dark, "Dark"),
+                            (ThemePreference::Light, "Light"),
+                        ] {
+                            if ui
+                                .selectable_value(&mut self.state.settings.theme, preference, label)
+                                .clicked()
+                            {
+                                if let Err(error) = self.state.save_settings() {
+                                    self.state.error_message = Some(error);
+                                }
+                                ui.close_menu();
+                            }
+                        }
+                    });
                 });
 
                 ui.menu_button("Help", |ui| {
@@ -173,6 +207,7 @@ impl eframe::App for Mp3TaggerApp {
                 ctx,
                 &mut self.state,
                 &mut self.ai_settings_draft,
+                &mut self.ai_settings_local_mode,
                 &mut self.show_ai_settings,
                 &self.message_tx,
             );

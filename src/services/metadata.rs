@@ -81,19 +81,6 @@ impl MetadataService {
                 ItemKey::UnsyncLyrics => metadata.lyrics = value.to_string(),
                 ItemKey::IntegerBpm => metadata.bpm = value.to_string(),
                 ItemKey::Isrc => metadata.isrc = value.to_string(),
-                ItemKey::MusicBrainzRecordingId => {
-                    metadata.musicbrainz_track_id = value.to_string()
-                }
-                ItemKey::MusicBrainzTrackId => metadata.musicbrainz_track_id = value.to_string(),
-                ItemKey::MusicBrainzArtistId => metadata.musicbrainz_artist_id = value.to_string(),
-                ItemKey::MusicBrainzReleaseId => metadata.musicbrainz_album_id = value.to_string(),
-                ItemKey::MusicBrainzReleaseArtistId => {
-                    metadata.musicbrainz_album_artist_id = value.to_string()
-                }
-                ItemKey::MusicBrainzReleaseGroupId => {
-                    metadata.musicbrainz_release_group_id = value.to_string()
-                }
-                ItemKey::MusicBrainzWorkId => metadata.musicbrainz_work_id = value.to_string(),
                 ItemKey::AcoustIdFingerprint => metadata.acoustid_fingerprint = value.to_string(),
                 ItemKey::AcoustId => metadata.acoustid_id = value.to_string(),
                 ItemKey::ReplayGainTrackGain => metadata.replaygain_track_gain = value.to_string(),
@@ -201,41 +188,17 @@ impl MetadataService {
         set_if_not_empty!(tag, ItemKey::UnsyncLyrics, metadata.lyrics);
         set_if_not_empty!(tag, ItemKey::IntegerBpm, metadata.bpm);
         set_if_not_empty!(tag, ItemKey::Isrc, metadata.isrc);
-        set_if_not_empty!(
-            tag,
+        for key in [
             ItemKey::MusicBrainzRecordingId,
-            metadata.musicbrainz_track_id
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::MusicBrainzTrackId,
-            metadata.musicbrainz_track_id
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::MusicBrainzArtistId,
-            metadata.musicbrainz_artist_id
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::MusicBrainzReleaseId,
-            metadata.musicbrainz_album_id
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::MusicBrainzReleaseArtistId,
-            metadata.musicbrainz_album_artist_id
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::MusicBrainzReleaseGroupId,
-            metadata.musicbrainz_release_group_id
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::MusicBrainzWorkId,
-            metadata.musicbrainz_work_id
-        );
+        ] {
+            tag.remove_key(key);
+        }
         set_if_not_empty!(
             tag,
             ItemKey::AcoustIdFingerprint,

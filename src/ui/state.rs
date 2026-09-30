@@ -70,6 +70,7 @@ pub struct AppState {
     pub settings_service: SettingsService,
     pub pending_changes: bool,
     pub library_view_mode: LibraryViewMode,
+    pub album_art_texture: Option<(String, egui::TextureHandle)>,
 }
 
 impl AppState {
@@ -89,6 +90,7 @@ impl AppState {
             settings_service,
             pending_changes: false,
             library_view_mode: LibraryViewMode::List,
+            album_art_texture: None,
         })
     }
 
@@ -140,6 +142,16 @@ impl AppState {
         }
     }
 
+    pub fn clear_current_metadata(&mut self) {
+        if let View::Detail(idx) = self.current_view {
+            if let Some(song) = self.songs.get_mut(idx) {
+                song.metadata = SongMetadata::default();
+                song.mark_changed();
+                self.pending_changes = true;
+            }
+        }
+    }
+
     pub fn save_current_song(&mut self) -> Result<()> {
         if let View::Detail(idx) = self.current_view {
             if idx < self.songs.len() {
@@ -167,6 +179,12 @@ impl AppState {
         match result {
             Ok(metadata) => {
                 if index < self.songs.len() {
+                    let existing = &self.songs[index].metadata;
+                    let mut metadata = metadata;
+                    if metadata.album_art.is_none() {
+                        metadata.album_art = existing.album_art.clone();
+                        metadata.album_art_mime = existing.album_art_mime.clone();
+                    }
                     self.songs[index].metadata = metadata;
                     self.songs[index].mark_changed();
                     self.pending_changes = true;

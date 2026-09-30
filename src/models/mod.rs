@@ -1,5 +1,5 @@
-pub mod song;
 pub mod errors;
+pub mod song;
 
-pub use song::{Song, SongMetadata, LLMSettings, AppSettings};
 pub use errors::{AppError, Result};
+pub use song::{AppSettings, LLMSettings, Song, SongMetadata, ThemePreference};
