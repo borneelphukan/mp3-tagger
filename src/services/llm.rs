@@ -91,22 +91,12 @@ Return ONLY a valid JSON object with these fields (use empty string "" for unkno
   "total_discs": "",
   "composer": "",
   "lyricist": "",
-  "conductor": "",
   "remixer": "",
   "producer": "",
-  "arranger": "",
-  "engineer": "",
-  "mixer": "",
   "comment": "",
   "lyrics": "",
   "bpm": "",
-  "isrc": "",
-  "acoustid_fingerprint": "",
-  "acoustid_id": "",
-  "replaygain_track_gain": "",
-  "replaygain_track_peak": "",
-  "replaygain_album_gain": "",
-  "replaygain_album_peak": ""
+  "isrc": ""
 }}
 
 Song: "{title}"

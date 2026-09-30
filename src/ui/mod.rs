@@ -14,6 +14,7 @@ pub struct Mp3TaggerApp {
     show_ai_settings: bool,
     ai_settings_draft: LLMSettings,
     ai_settings_local_mode: bool,
+    show_about: bool,
 }
 
 impl Mp3TaggerApp {
@@ -36,6 +37,7 @@ impl Mp3TaggerApp {
             show_ai_settings: false,
             ai_settings_draft,
             ai_settings_local_mode,
+            show_about: false,
         }
     }
 
@@ -46,6 +48,93 @@ impl Mp3TaggerApp {
                 style.spacing.button_padding = egui::vec2(12.0, 6.0);
                 style.spacing.interact_size = egui::vec2(100.0, 28.0);
             });
+        }
+    }
+
+    fn show_about_popup(ctx: &egui::Context, open: &mut bool) {
+        let mut close_clicked = false;
+        egui::Window::new("About MP3 Tagger")
+            .open(open)
+            .collapsible(false)
+            .resizable(true)
+            .default_size([760.0, 560.0])
+            .min_size([600.0, 460.0])
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    egui::Frame::none()
+                        .fill(egui::Color32::from_rgb(112, 78, 184))
+                        .inner_margin(egui::Margin::same(5.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new("♫")
+                                    .size(28.0)
+                                    .color(egui::Color32::WHITE),
+                            );
+                        });
+                    ui.add_space(14.0);
+                    ui.heading(egui::RichText::new("MP3 Tagger").size(34.0));
+                });
+
+                ui.add_space(20.0);
+                ui.label(
+                    egui::RichText::new(
+                        "MP3 Tagger is a modern, easy-to-use application for editing audio metadata and cover artwork.",
+                    )
+                    .size(18.0),
+                );
+                ui.add_space(16.0);
+                ui.label(
+                    egui::RichText::new("This release was provided by Borneel B. Phukan.")
+                        .size(16.0),
+                );
+                ui.label(
+                    egui::RichText::new("Copyright © 2026-Present Borneel B. Phukan.")
+                        .size(16.0),
+                );
+
+                ui.add_space(14.0);
+                ui.horizontal(|ui| {
+                    let link_color = egui::Color32::from_rgb(0, 160, 245);
+                    for label in ["Credits", "Website", "Release Notes"] {
+                        ui.label(egui::RichText::new(label).size(18.0).color(link_color));
+                        ui.add_space(12.0);
+                    }
+                });
+
+                ui.add_space(26.0);
+                ui.horizontal(|ui| {
+                    ui.heading("Version Information");
+                    ui.label("◆");
+                });
+                ui.add_space(8.0);
+                egui::Grid::new("about_version_info")
+                    .num_columns(2)
+                    .spacing([28.0, 8.0])
+                    .show(ui, |ui| {
+                        let value_color = ui.visuals().weak_text_color();
+                        for (label, value) in [
+                            ("Version:", env!("CARGO_PKG_VERSION").to_string()),
+                            (
+                                "Environment:",
+                                format!("OS: {}; Arch: {}", std::env::consts::OS, std::env::consts::ARCH),
+                            ),
+                            ("Developer:", "Borneel B. Phukan".to_string()),
+                        ] {
+                            ui.label(egui::RichText::new(label).size(16.0));
+                            ui.label(egui::RichText::new(value).size(16.0).color(value_color));
+                            ui.end_row();
+                        }
+                    });
+
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::RIGHT), |ui| {
+                    if ui.button("Close").clicked() {
+                        close_clicked = true;
+                    }
+                });
+            });
+        if close_clicked {
+            *open = false;
         }
     }
 
@@ -176,8 +265,7 @@ impl eframe::App for Mp3TaggerApp {
 
                 ui.menu_button("Help", |ui| {
                     if ui.button("About").clicked() {
-                        self.state.error_message =
-                            Some("MP3 Tagger v0.1.0\nNative Rust MP3 Metadata Editor".to_string());
+                        self.show_about = true;
                         ui.close_menu();
                     }
                 });
@@ -211,6 +299,10 @@ impl eframe::App for Mp3TaggerApp {
                 &mut self.show_ai_settings,
                 &self.message_tx,
             );
+        }
+
+        if self.show_about {
+            Self::show_about_popup(ctx, &mut self.show_about);
         }
 
         // Request repaint if fetching

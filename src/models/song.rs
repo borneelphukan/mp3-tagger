@@ -16,22 +16,12 @@ pub struct SongMetadata {
     pub total_discs: String,
     pub composer: String,
     pub lyricist: String,
-    pub conductor: String,
     pub remixer: String,
     pub producer: String,
-    pub arranger: String,
-    pub engineer: String,
-    pub mixer: String,
     pub comment: String,
     pub lyrics: String,
     pub bpm: String,
     pub isrc: String,
-    pub acoustid_fingerprint: String,
-    pub acoustid_id: String,
-    pub replaygain_track_gain: String,
-    pub replaygain_track_peak: String,
-    pub replaygain_album_gain: String,
-    pub replaygain_album_peak: String,
     pub album_art: Option<Vec<u8>>,
     pub album_art_mime: Option<String>,
 }
@@ -50,22 +40,12 @@ impl SongMetadata {
             && self.total_discs.is_empty()
             && self.composer.is_empty()
             && self.lyricist.is_empty()
-            && self.conductor.is_empty()
             && self.remixer.is_empty()
             && self.producer.is_empty()
-            && self.arranger.is_empty()
-            && self.engineer.is_empty()
-            && self.mixer.is_empty()
             && self.comment.is_empty()
             && self.lyrics.is_empty()
             && self.bpm.is_empty()
             && self.isrc.is_empty()
-            && self.acoustid_fingerprint.is_empty()
-            && self.acoustid_id.is_empty()
-            && self.replaygain_track_gain.is_empty()
-            && self.replaygain_track_peak.is_empty()
-            && self.replaygain_album_gain.is_empty()
-            && self.replaygain_album_peak.is_empty()
             && self.album_art.is_none()
     }
 
@@ -87,22 +67,12 @@ impl SongMetadata {
             "Total Discs",
             "Composer",
             "Lyricist",
-            "Conductor",
             "Remixer",
             "Producer",
-            "Arranger",
-            "Engineer",
-            "Mixer",
             "Comment",
             "Lyrics",
             "BPM",
             "ISRC",
-            "AcoustID Fingerprint",
-            "AcoustID ID",
-            "ReplayGain Track Gain",
-            "ReplayGain Track Peak",
-            "ReplayGain Album Gain",
-            "ReplayGain Album Peak",
         ]
     }
 
@@ -120,22 +90,12 @@ impl SongMetadata {
             9 => &self.total_discs,
             10 => &self.composer,
             11 => &self.lyricist,
-            12 => &self.conductor,
-            13 => &self.remixer,
-            14 => &self.producer,
-            15 => &self.arranger,
-            16 => &self.engineer,
-            17 => &self.mixer,
-            18 => &self.comment,
-            19 => &self.lyrics,
-            20 => &self.bpm,
-            21 => &self.isrc,
-            22 => &self.acoustid_fingerprint,
-            23 => &self.acoustid_id,
-            24 => &self.replaygain_track_gain,
-            25 => &self.replaygain_track_peak,
-            26 => &self.replaygain_album_gain,
-            27 => &self.replaygain_album_peak,
+            12 => &self.remixer,
+            13 => &self.producer,
+            14 => &self.comment,
+            15 => &self.lyrics,
+            16 => &self.bpm,
+            17 => &self.isrc,
             _ => "",
         }
     }
@@ -154,22 +114,12 @@ impl SongMetadata {
             9 => self.total_discs = value,
             10 => self.composer = value,
             11 => self.lyricist = value,
-            12 => self.conductor = value,
-            13 => self.remixer = value,
-            14 => self.producer = value,
-            15 => self.arranger = value,
-            16 => self.engineer = value,
-            17 => self.mixer = value,
-            18 => self.comment = value,
-            19 => self.lyrics = value,
-            20 => self.bpm = value,
-            21 => self.isrc = value,
-            22 => self.acoustid_fingerprint = value,
-            23 => self.acoustid_id = value,
-            24 => self.replaygain_track_gain = value,
-            25 => self.replaygain_track_peak = value,
-            26 => self.replaygain_album_gain = value,
-            27 => self.replaygain_album_peak = value,
+            12 => self.remixer = value,
+            13 => self.producer = value,
+            14 => self.comment = value,
+            15 => self.lyrics = value,
+            16 => self.bpm = value,
+            17 => self.isrc = value,
             _ => {}
         }
     }

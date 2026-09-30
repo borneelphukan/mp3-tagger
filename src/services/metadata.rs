@@ -71,22 +71,12 @@ impl MetadataService {
                 ItemKey::DiscTotal => metadata.total_discs = value.to_string(),
                 ItemKey::Composer => metadata.composer = value.to_string(),
                 ItemKey::Lyricist => metadata.lyricist = value.to_string(),
-                ItemKey::Conductor => metadata.conductor = value.to_string(),
                 ItemKey::Remixer => metadata.remixer = value.to_string(),
                 ItemKey::Producer => metadata.producer = value.to_string(),
-                ItemKey::Arranger => metadata.arranger = value.to_string(),
-                ItemKey::Engineer => metadata.engineer = value.to_string(),
-                ItemKey::MixEngineer => metadata.mixer = value.to_string(),
                 ItemKey::Comment => metadata.comment = value.to_string(),
                 ItemKey::UnsyncLyrics => metadata.lyrics = value.to_string(),
                 ItemKey::IntegerBpm => metadata.bpm = value.to_string(),
                 ItemKey::Isrc => metadata.isrc = value.to_string(),
-                ItemKey::AcoustIdFingerprint => metadata.acoustid_fingerprint = value.to_string(),
-                ItemKey::AcoustId => metadata.acoustid_id = value.to_string(),
-                ItemKey::ReplayGainTrackGain => metadata.replaygain_track_gain = value.to_string(),
-                ItemKey::ReplayGainTrackPeak => metadata.replaygain_track_peak = value.to_string(),
-                ItemKey::ReplayGainAlbumGain => metadata.replaygain_album_gain = value.to_string(),
-                ItemKey::ReplayGainAlbumPeak => metadata.replaygain_album_peak = value.to_string(),
                 _ => {}
             }
         }
@@ -178,12 +168,8 @@ impl MetadataService {
         set_if_not_empty!(tag, ItemKey::DiscTotal, metadata.total_discs);
         set_if_not_empty!(tag, ItemKey::Composer, metadata.composer);
         set_if_not_empty!(tag, ItemKey::Lyricist, metadata.lyricist);
-        set_if_not_empty!(tag, ItemKey::Conductor, metadata.conductor);
         set_if_not_empty!(tag, ItemKey::Remixer, metadata.remixer);
         set_if_not_empty!(tag, ItemKey::Producer, metadata.producer);
-        set_if_not_empty!(tag, ItemKey::Arranger, metadata.arranger);
-        set_if_not_empty!(tag, ItemKey::Engineer, metadata.engineer);
-        set_if_not_empty!(tag, ItemKey::MixEngineer, metadata.mixer);
         set_if_not_empty!(tag, ItemKey::Comment, metadata.comment);
         set_if_not_empty!(tag, ItemKey::UnsyncLyrics, metadata.lyrics);
         set_if_not_empty!(tag, ItemKey::IntegerBpm, metadata.bpm);
@@ -199,32 +185,20 @@ impl MetadataService {
         ] {
             tag.remove_key(key);
         }
-        set_if_not_empty!(
-            tag,
+        for key in [
+            ItemKey::Conductor,
+            ItemKey::Arranger,
+            ItemKey::Engineer,
+            ItemKey::MixEngineer,
+            ItemKey::AcoustId,
             ItemKey::AcoustIdFingerprint,
-            metadata.acoustid_fingerprint
-        );
-        set_if_not_empty!(tag, ItemKey::AcoustId, metadata.acoustid_id);
-        set_if_not_empty!(
-            tag,
             ItemKey::ReplayGainTrackGain,
-            metadata.replaygain_track_gain
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::ReplayGainTrackPeak,
-            metadata.replaygain_track_peak
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::ReplayGainAlbumGain,
-            metadata.replaygain_album_gain
-        );
-        set_if_not_empty!(
-            tag,
             ItemKey::ReplayGainAlbumPeak,
-            metadata.replaygain_album_peak
-        );
+        ] {
+            tag.remove_key(key);
+        }
     }
 
     pub fn load_song(path: &Path) -> Result<Song> {

@@ -2,6 +2,8 @@ use crate::models::{AppSettings, Song, SongMetadata};
 use crate::services::llm::LlmService;
 use crate::services::metadata::MetadataService;
 use crate::services::settings::SettingsService;
+use eframe::egui;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,7 +72,8 @@ pub struct AppState {
     pub settings_service: SettingsService,
     pub pending_changes: bool,
     pub library_view_mode: LibraryViewMode,
-    pub album_art_texture: Option<(String, egui::TextureHandle)>,
+    pub album_art_textures: HashMap<String, egui::TextureHandle>,
+    pub confirm_discard_changes: bool,
 }
 
 impl AppState {
@@ -90,7 +93,8 @@ impl AppState {
             settings_service,
             pending_changes: false,
             library_view_mode: LibraryViewMode::List,
-            album_art_texture: None,
+            album_art_textures: HashMap::new(),
+            confirm_discard_changes: false,
         })
     }
 
@@ -123,6 +127,42 @@ impl AppState {
         }
         self.current_view = View::Grid;
         self.selected_index = None;
+    }
+
+    pub fn confirm_discard_and_go_back(&mut self) {
+        if let View::Detail(index) = self.current_view {
+            if let Some(song) = self.songs.get_mut(index) {
+                song.metadata = song.original_metadata.clone();
+                song.has_changes = false;
+            }
+        }
+        self.confirm_discard_changes = false;
+        self.current_view = View::Grid;
+        self.selected_index = None;
+    }
+
+    pub fn album_art_texture(
+        &mut self,
+        ctx: &egui::Context,
+        path: &str,
+        bytes: &[u8],
+    ) -> Option<egui::TextureHandle> {
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        path.hash(&mut hasher);
+        bytes.hash(&mut hasher);
+        let key = format!("album-art-{}", hasher.finish());
+        if !self.album_art_textures.contains_key(&key) {
+            let image = image::load_from_memory(bytes).ok()?;
+            let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                [image.width() as usize, image.height() as usize],
+                image.to_rgba8().as_flat_samples().as_slice(),
+            );
+            let texture = ctx.load_texture(&key, color_image, Default::default());
+            self.album_art_textures.insert(key.clone(), texture);
+        }
+        self.album_art_textures.get(&key).cloned()
     }
 
     pub fn open_song_detail(&mut self, index: usize) {
@@ -181,6 +221,9 @@ impl AppState {
                 if index < self.songs.len() {
                     let existing = &self.songs[index].metadata;
                     let mut metadata = metadata;
+                    if metadata.lyrics.trim().is_empty() {
+                        metadata.lyrics = existing.lyrics.clone();
+                    }
                     if metadata.album_art.is_none() {
                         metadata.album_art = existing.album_art.clone();
                         metadata.album_art_mime = existing.album_art_mime.clone();

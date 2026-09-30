@@ -2,8 +2,6 @@ use crate::models::SongMetadata;
 use crate::services::llm::get_tokio_handle;
 use crate::ui::state::{AppMessage, AppState, View};
 use eframe::egui;
-use image::ImageReader;
-use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
 pub struct DetailView;
@@ -39,7 +37,7 @@ impl DetailView {
         let fields: Vec<(usize, String, String)> = SongMetadata::field_names()
             .iter()
             .enumerate()
-            .filter(|(i, _)| *i != 19)
+            .filter(|(i, _)| *i != 15)
             .map(|(i, name)| (i, name.to_string(), song.metadata.get_field(i).to_string()))
             .collect();
         // Drop the song reference here
@@ -47,14 +45,13 @@ impl DetailView {
 
         egui::TopBottomPanel::top("detail_top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let back = ui.add_enabled(!has_changes, egui::Button::new("← Back to Library"));
+                let back = ui.button("← Back to Library");
                 if back.clicked() {
-                    state.go_back();
-                }
-                if has_changes {
-                    back.on_disabled_hover_text(
-                        "Save your changes before returning to the library.",
-                    );
+                    if has_changes {
+                        state.confirm_discard_changes = true;
+                    } else {
+                        state.go_back();
+                    }
                 }
 
                 ui.separator();
@@ -141,8 +138,9 @@ impl DetailView {
                     .add_enabled(has_changes, egui::Button::new("💾 Save"))
                     .clicked()
                 {
-                    if let Err(e) = state.save_current_song() {
-                        state.error_message = Some(e);
+                    match state.save_current_song() {
+                        Ok(()) => state.go_back(),
+                        Err(e) => state.error_message = Some(e),
                     }
                 }
             });
@@ -198,6 +196,24 @@ impl DetailView {
                     }
                 });
         }
+
+        if state.confirm_discard_changes {
+            egui::Window::new("Unsaved changes")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .show(ctx, |ui| {
+                    ui.label("You have unsaved changes. Any changes made will be lost. Go back?");
+                    ui.horizontal(|ui| {
+                        if ui.button("Yes").clicked() {
+                            state.confirm_discard_and_go_back();
+                        }
+                        if ui.button("No").clicked() {
+                            state.confirm_discard_changes = false;
+                        }
+                    });
+                });
+        }
     }
 
     fn show_metadata_fields(
@@ -235,7 +251,7 @@ impl DetailView {
                 )
                 .changed()
             {
-                state.update_metadata_field(idx, 19, lyrics_text);
+                state.update_metadata_field(idx, 15, lyrics_text);
             }
         });
     }
@@ -248,43 +264,16 @@ impl DetailView {
         _album_art_mime: &Option<String>,
         path_display: &str,
     ) {
-        let mut art_decode_failed = false;
-        let texture = album_art.as_ref().and_then(|art_data| {
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            use std::hash::{Hash, Hasher};
-            art_data.hash(&mut hasher);
-            let texture_key = format!("{path_display}-{:x}", hasher.finish());
-            if state.album_art_texture.as_ref().map(|(key, _)| key) != Some(&texture_key) {
-                match ImageReader::new(Cursor::new(art_data))
-                    .with_guessed_format()
-                    .ok()
-                    .and_then(|reader| reader.decode().ok())
-                {
-                    Some(decoded) => {
-                        let color_image = egui::ColorImage::from_rgba_unmultiplied(
-                            [decoded.width() as usize, decoded.height() as usize],
-                            decoded.to_rgba8().as_flat_samples().as_slice(),
-                        );
-                        let handle =
-                            ui.ctx()
-                                .load_texture(&texture_key, color_image, Default::default());
-                        state.album_art_texture = Some((texture_key.clone(), handle));
-                    }
-                    None => art_decode_failed = true,
-                }
-            }
-            state
-                .album_art_texture
-                .as_ref()
-                .map(|(_, texture)| texture.clone())
-        });
+        let texture = album_art
+            .as_ref()
+            .and_then(|bytes| state.album_art_texture(ui.ctx(), path_display, bytes));
         ui.vertical_centered(|ui| {
             ui.heading("Album Artwork");
             ui.separator();
 
             if let Some(texture) = texture {
                 ui.add(egui::Image::new(&texture).fit_to_exact_size(egui::vec2(300.0, 300.0)));
-            } else if art_decode_failed {
+            } else if album_art.is_some() {
                 ui.label("Failed to load artwork image");
             } else {
                 ui.add_space(100.0);

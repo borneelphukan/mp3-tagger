@@ -29,11 +29,8 @@ A native Rust desktop application for editing MP3 metadata with LLM-powered meta
 |----------|--------|
 | Basic | Title, Artist, Album, Album Artist, Year, Genre |
 | Track Info | Track Number, Total Tracks, Disc Number, Total Discs |
-| Credits | Composer, Lyricist, Conductor, Remixer, Producer, Arranger, Engineer, Mixer |
+| Credits | Composer, Lyricist, Remixer, Producer |
 | Additional | Comment, Lyrics, BPM, ISRC |
-| MusicBrainz | Track ID, Artist ID, Album ID, Album Artist ID, Release Group ID, Work ID |
-| AcoustID | Fingerprint, ID |
-| ReplayGain | Track Gain, Track Peak, Album Gain, Album Peak |
 | Artwork | Cover Art (embedded) |
 
 ## Building
