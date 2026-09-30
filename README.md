@@ -128,6 +128,22 @@ Pushing a `v*` tag runs `.github/workflows/windows-installer.yml` and
 `.github/workflows/debian.yml`, which attach the `.exe` and `.deb` to the release and republish the
 apt repository to GitHub Pages.
 
+## Website
+
+The product landing page lives in `website/` (React + TypeScript + Tailwind CSS v4,
+built with Vite). See `website/README.md` for the dev commands.
+
+The Debian workflow builds it on every run and merges the output into the GitHub
+Pages site, so the landing page is served at the site root while the apt
+repository keeps living under `/apt` and `/install.sh`. The displayed version
+comes from the `Cargo.toml` version passed as `VITE_APP_VERSION`.
+
+> **First deployment note:** the workflow enables GitHub Pages automatically via
+> `actions/configure-pages` with `enablement: true`. If that ever fails (e.g. a
+> restrictive organisation policy), enable Pages manually under repository
+> **Settings → Pages → Build and deployment → GitHub Actions** and re-run the
+> workflow.
+
 ## Configuration
 
 On first run, the app creates a config directory:

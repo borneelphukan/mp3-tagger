@@ -12,6 +12,7 @@ on:
       - "build.rs"
       - "packaging/**"
       - "assets/**"
+      - "website/**"
       - ".github/workflows/debian.yml"
   workflow_dispatch:
   schedule:
@@ -123,9 +124,38 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  website:
+    name: Build website
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Build the landing page
+        working-directory: website
+        env:
+          VITE_APP_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload the site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-dist
+          if-no-files-found: error
+          retention-days: 7
+          path: website/dist
+
   publish-apt:
     name: Publish apt repository
-    needs: build
+    needs: [build, website]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -144,6 +174,12 @@ jobs:
         with:
           name: debian-package
           path: dist
+
+      - name: Download the website artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: website-dist
+          path: site
 
       - name: Prepare signing key material
         id: key
@@ -216,6 +252,21 @@ jobs:
       - name: Configure GitHub Pages
         id: deployment
         uses: actions/configure-pages@v5
+        with:
+          # Enable Pages on first run so a fresh repository does not fail
+          # with "Get Pages site failed ... Not Found".
+          enablement: true
+
+      - name: Merge the website into the Pages site
+        run: |
+          # The landing page takes the site root; the apt repository keeps
+          # living under /apt and /install.sh stays where it is.
+          cp -r site/. pages/
+          test -f pages/index.html
+          test -f pages/apt/dists/stable/Release
+          test -f pages/install.sh
+          echo "Pages site root:"
+          ls pages | head -20
 
       - name: Upload the repository to GitHub Pages
         uses: actions/upload-pages-artifact@v3
@@ -229,7 +280,8 @@ jobs:
       - name: Show the install command
         run: |
           {
-            echo "### Install"
+            echo "### Site and install"
+            echo "Landing page: ${{ steps.deployment.outputs.page_url }}"
             echo '```bash'
             echo "curl -fsSL ${{ steps.deployment.outputs.page_url }}/install.sh | sudo bash"
             echo '```'

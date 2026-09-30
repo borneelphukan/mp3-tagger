@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+    scroll-padding-top: 6rem;
+  }
+
+  body {
+    @apply m-0 bg-zinc-950 font-sans text-zinc-50 antialiased;
+  }
+
+  button, summary { cursor: pointer; }
+  a, button, summary { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2px solid #a5b4fc; outline-offset: 5px; }
+  h1, h2, h3 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+  ::selection { background: #4f46e5; color: white; }
+}
+
+@layer components {
+  .button-primary {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-950/40 transition duration-200 hover:bg-indigo-400;
+  }
+  .button-secondary {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium text-zinc-200 transition duration-200 hover:border-white/20 hover:bg-white/10;
+  }
+  .surface-card {
+    @apply min-w-0 rounded-2xl border border-white/10 bg-linear-to-br from-zinc-900 to-zinc-950;
+  }
+  .eyebrow {
+    @apply text-xs font-semibold tracking-[0.18em] text-indigo-300 uppercase;
+  }
+  .hero-glow {
+    background: radial-gradient(ellipse at 50% 15%, #6366f126, transparent 60%);
+  }
+  .preview-glow {
+    box-shadow: 0 0 100px -30px #6366f14d, 0 35px 90px -20px #000a;
+  }
+  .album-cover {
+    background: radial-gradient(ellipse at 70% 20%, #ffdda7, transparent 45%),
+      linear-gradient(140deg, #423039, #bd7851 55%, #292538);
+  }
+  .enter-animation { animation: enter 700ms ease-out both; }
+}
+
+@keyframes enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

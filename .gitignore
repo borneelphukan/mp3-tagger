@@ -33,6 +33,8 @@ Thumbs.db
 
 # Distribution
 /dist/
+website/dist/
+website/node_modules/
 *.deb
 *.rpm
 *.msi
