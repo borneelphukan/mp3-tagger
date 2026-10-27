@@ -104,7 +104,8 @@ jobs:
           if ($vi.ProductName -ne "MP3 Tagger") {
             throw "ProductName was not embedded, found '$($vi.ProductName)'"
           }
-          if ($vi.FileVersion -notmatch "^${{ steps.meta.outputs.numeric }}\.") {
+          $expectedFileVersion = [regex]::Escape("${{ steps.meta.outputs.numeric }}")
+          if ($vi.FileVersion -notmatch "^$expectedFileVersion$") {
             throw "unexpected FileVersion '$($vi.FileVersion)'"
           }
           Write-Host "ProductName=$($vi.ProductName) FileVersion=$($vi.FileVersion)"
