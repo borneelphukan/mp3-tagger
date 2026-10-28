@@ -104,7 +104,9 @@ jobs:
           if ($vi.ProductName -ne "MP3 Tagger") {
             throw "ProductName was not embedded, found '$($vi.ProductName)'"
           }
-          $expectedFileVersion = [regex]::Escape("${{ steps.meta.outputs.numeric }}")
+          # winresource embeds Cargo's semantic version (for example 0.1.0).
+          # The four-field numeric version is only used by NSIS below.
+          $expectedFileVersion = [regex]::Escape("${{ steps.meta.outputs.version }}")
           if ($vi.FileVersion -notmatch "^$expectedFileVersion$") {
             throw "unexpected FileVersion '$($vi.FileVersion)'"
           }
