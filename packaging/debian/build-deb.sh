@@ -30,6 +30,7 @@ log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -f "$BINARY" ] || die "release binary not found at $BINARY (run: cargo build --release)"
+BINARY="$(cd -- "$(dirname -- "$BINARY")" && pwd)/$(basename -- "$BINARY")"
 
 if ! command -v dpkg-deb >/dev/null 2>&1; then
     die "dpkg-deb is required (apt-get install -y dpkg-dev)"

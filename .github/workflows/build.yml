@@ -1,0 +1,705 @@
+name: Build
+
+# Produces every distributable for MP3 Tagger:
+#   Linux  : Debian (x86_64, RISC-V 64), Flatpak (x86_64, ARM64),
+#            AppImage (x86_64, ARM64), RPM (x86_64, ARM64, RISC-V 64),
+#            Tarball (x86_64, ARM64, RISC-V 64), Arch (x86_64, ARM64)
+#   Windows: Installer/Portable (64-bit, 32-bit, ARM64)
+#   macOS  : Disk image (Universal)
+# plus the apt repository and landing page on GitHub Pages.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - "installer/**"
+      - "packaging/**"
+      - "assets/**"
+      - "website/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+  schedule:
+    # Rebuild weekly so the apt repository stays available and picks up new
+    # runner images. Heavy packaging jobs skip scheduled runs (see their `if`).
+    - cron: "37 5 * * 1"
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  metadata:
+    name: Read version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      numeric: ${{ steps.meta.outputs.numeric }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from Cargo.toml
+        id: meta
+        run: |
+          version="$(sed -n '0,/^version[[:space:]]*=/s/^version[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version" || { echo "version not found in Cargo.toml" >&2; exit 1; }
+          # Four-field numeric version for Windows installer metadata.
+          IFS=. read -r major minor patch _rest <<< "${version%%-*}"
+          numeric="${major:-0}.${minor:-0}.${patch:-0}.0"
+          {
+            echo "version=$version"
+            echo "numeric=$numeric"
+          } >> "$GITHUB_OUTPUT"
+          echo "### Build $version ($numeric)" >> "$GITHUB_STEP_SUMMARY"
+
+  debian-x86_64:
+    name: Debian package (x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config dpkg-dev desktop-file-utils appstream \
+            libx11-dev libxcb1-dev libxcb-composite0-dev libxcb-cursor-dev \
+            libxcb-image0-dev libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-render0-dev libxcb-render-util0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Build Debian package
+        id: build
+        run: |
+          deb="$(packaging/debian/build-deb.sh | tail -n1)"
+          echo "deb=$(basename "$deb")" >> "$GITHUB_OUTPUT"
+          dpkg-deb --field "$deb" \
+            Package Version Architecture Depends Installed-Size \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the package layout
+        run: |
+          deb="dist/${{ steps.build.outputs.deb }}"
+          data="$(mktemp -d)"
+          control="$(mktemp -d)"
+          dpkg-deb --extract "$deb" "$data"
+          dpkg-deb --control "$deb" "$control"
+          desktop-file-validate "$data/usr/share/applications/mp3-tagger.desktop"
+          appstreamcli validate --no-net "$data/usr/share/metainfo/mp3-tagger.metainfo.xml"
+          test -x "$data/usr/bin/mp3-tagger"
+          test -s "$data/usr/share/icons/hicolor/256x256/apps/mp3-tagger.png"
+          test -f "$data/usr/share/doc/mp3-tagger/copyright"
+          for script in postinst prerm postrm; do
+            test -x "$control/$script"
+            sh -n "$control/$script"
+          done
+          echo "package layout OK"
+          {
+            echo '```'
+            dpkg-deb --contents "$deb" | awk '{print $1, $6}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -rf "$data" "$control"
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Debian package (x86_64)
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/*.deb
+
+  linux-packages:
+    name: Linux packages (${{ matrix.label }})
+    needs: metadata
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: x86_64
+            arch: x86_64
+            runner: ubuntu-24.04
+          - label: ARM64
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config dpkg-dev desktop-file-utils appstream \
+            rpm squashfs-tools zstd file \
+            flatpak flatpak-builder \
+            libx11-dev libxcb1-dev libxcb-composite0-dev libxcb-cursor-dev \
+            libxcb-image0-dev libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-render0-dev libxcb-render-util0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Build tarball
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          OUT_DIR: dist/tarball-${{ matrix.arch }}
+        run: packaging/linux/build-tarball.sh
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tarball (${{ matrix.label }})
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/tarball-${{ matrix.arch }}/*
+
+      - name: Build AppImage
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          OUT_DIR: dist/appimage-${{ matrix.arch }}
+        run: packaging/linux/build-appimage.sh
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppImage (${{ matrix.label }})
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/appimage-${{ matrix.arch }}/*
+
+      - name: Build RPM package
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          RPM_ARCH: ${{ matrix.arch }}
+          OUT_DIR: dist/rpm-${{ matrix.arch }}
+        run: packaging/rpm/build-rpm.sh
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: RPM package (${{ matrix.label }})
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/rpm-${{ matrix.arch }}/*
+
+      - name: Allow unprivileged user namespaces for Flatpak
+        # Ubuntu 24.04 restricts unprivileged user namespaces, which breaks the
+        # bubblewrap sandbox used by flatpak-builder.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Build Flatpak
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          OUT_DIR: dist/flatpak-${{ matrix.arch }}
+        run: packaging/flatpak/build-flatpak.sh
+
+      - name: Upload Flatpak
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flatpak (${{ matrix.label }})
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/flatpak-${{ matrix.arch }}/*
+
+      - name: Build Arch package
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          OUT_DIR: dist/arch-${{ matrix.arch }}
+        run: packaging/arch/build-arch-pkg.sh
+
+      - name: Upload Arch package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Arch package (${{ matrix.label }})
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/arch-${{ matrix.arch }}/*
+
+  linux-riscv64:
+    name: Linux packages (RISC-V 64)
+    needs: metadata
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dpkg-dev rpm
+
+      - name: Cross-compile release binary
+        run: cross build --release --locked --target riscv64gc-unknown-linux-gnu
+
+      - name: Build tarball
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          ARCH: riscv64
+          BINARY: target/riscv64gc-unknown-linux-gnu/release/mp3-tagger
+          OUT_DIR: dist/tarball-riscv64
+        run: packaging/linux/build-tarball.sh
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tarball (RISC-V 64)
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/tarball-riscv64/*
+
+      - name: Build Debian package
+        env:
+          BINARY: target/riscv64gc-unknown-linux-gnu/release/mp3-tagger
+          DEB_ARCH: riscv64
+          OUT_DIR: dist/deb-riscv64
+        run: packaging/debian/build-deb.sh
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Debian package (RISC-V 64)
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/deb-riscv64/*
+
+      - name: Build RPM package
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          RPM_ARCH: riscv64
+          BINARY: target/riscv64gc-unknown-linux-gnu/release/mp3-tagger
+          OUT_DIR: dist/rpm-riscv64
+        run: packaging/rpm/build-rpm.sh
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: RPM package (RISC-V 64)
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/rpm-riscv64/*
+
+  windows:
+    name: Windows (${{ matrix.label }})
+    needs: metadata
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: 64-bit
+            arch: x64
+            target: x86_64-pc-windows-msvc
+          - label: 32-bit
+            arch: x86
+            target: i686-pc-windows-msvc
+          - label: ARM64
+            arch: arm64
+            target: aarch64-pc-windows-msvc
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Verify the resources were embedded
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "target\${{ matrix.target }}\release\mp3-tagger.exe").Path
+          $vi = (Get-Item $exe).VersionInfo
+          if ($vi.ProductName -ne "MP3 Tagger") {
+            throw "ProductName was not embedded, found '$($vi.ProductName)'"
+          }
+          # winresource embeds Cargo's semantic version (for example 0.1.0).
+          $expectedFileVersion = [regex]::Escape("${{ needs.metadata.outputs.version }}")
+          if ($vi.FileVersion -notmatch "^$expectedFileVersion$") {
+            throw "unexpected FileVersion '$($vi.FileVersion)'"
+          }
+          Write-Host "ProductName=$($vi.ProductName) FileVersion=$($vi.FileVersion)"
+
+      - name: Install Inno Setup
+        id: inno
+        shell: pwsh
+        run: |
+          $iscc = $null
+          foreach ($root in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+            if (-not $root) { continue }
+            foreach ($dir in Get-ChildItem $root -Directory -Filter 'Inno Setup*' -ErrorAction SilentlyContinue) {
+              $candidate = Join-Path $dir.FullName 'ISCC.exe'
+              if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                $iscc = $candidate
+                break
+              }
+            }
+            if ($iscc) { break }
+          }
+
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed with exit code $LASTEXITCODE" }
+            foreach ($root in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+              if (-not $root) { continue }
+              foreach ($dir in Get-ChildItem $root -Directory -Filter 'Inno Setup*' -ErrorAction SilentlyContinue) {
+                $candidate = Join-Path $dir.FullName 'ISCC.exe'
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                  $iscc = $candidate
+                  break
+                }
+              }
+              if ($iscc) { break }
+            }
+          }
+
+          if (-not $iscc) { throw "ISCC.exe could not be located" }
+          "iscc=$iscc" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "using Inno Setup: $iscc"
+
+      - name: Build installer and portable zip
+        id: package
+        shell: pwsh
+        run: |
+          $version = "${{ needs.metadata.outputs.version }}"
+          $numeric = "${{ needs.metadata.outputs.numeric }}"
+          $arch = "${{ matrix.arch }}"
+          $source = (Resolve-Path "target\${{ matrix.target }}\release\mp3-tagger.exe").Path
+          $base = "MP3Tagger-Setup-$version-$arch"
+          $iscc = "${{ steps.inno.outputs.iscc }}"
+
+          # Quoting each define keeps PowerShell from splitting dotted values.
+          $isccArgs = @(
+            "/DMyAppVersion=$version"
+            "/DMyVersionInfo=$numeric"
+            "/DMyArch=$arch"
+            "/DMySourceExe=$source"
+            "/DMyOutputBaseFilename=$base"
+            "installer\mp3-tagger.iss"
+          )
+          & $iscc @isccArgs
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+          $setup = "target\$base.exe"
+          if (-not (Test-Path -LiteralPath $setup)) { throw "installer was not created at $setup" }
+
+          $stage = "target\portable-$arch"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $source $stage
+          Copy-Item "README.md" $stage
+          $portable = "target\MP3Tagger-$version-windows-$arch.zip"
+          Compress-Archive -Path "$stage\*" -DestinationPath $portable -Force
+
+          "setup=$setup" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "portable=$portable" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "created $setup and $portable"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Installer (${{ matrix.label }})
+          if-no-files-found: error
+          retention-days: 30
+          path: ${{ steps.package.outputs.setup }}
+
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: Portable (${{ matrix.label }})
+          if-no-files-found: error
+          retention-days: 30
+          path: ${{ steps.package.outputs.portable }}
+
+  macos-universal:
+    name: Disk image (Universal)
+    needs: metadata
+    if: github.event_name != 'schedule'
+    runs-on: macos-14
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Build release binaries
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          lipo -create \
+            -output target/release/mp3-tagger \
+            target/aarch64-apple-darwin/release/mp3-tagger \
+            target/x86_64-apple-darwin/release/mp3-tagger
+          lipo -info target/release/mp3-tagger
+
+      - name: Build disk image
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          OUT_DIR: dist/macos-universal
+        run: packaging/macos/build-dmg.sh
+
+      - name: Upload disk image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Disk image (Universal)
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/macos-universal/*.dmg
+
+  website:
+    name: Build website
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Build the landing page
+        working-directory: website
+        env:
+          VITE_APP_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload the site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-dist
+          if-no-files-found: error
+          retention-days: 7
+          path: website/dist
+
+  publish-pages:
+    name: Publish apt repository
+    needs: [debian-x86_64, website]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the Debian package
+        uses: actions/download-artifact@v4
+        with:
+          name: Debian package (x86_64)
+          path: dist
+
+      - name: Download the website artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: website-dist
+          path: site
+
+      - name: Prepare signing key material
+        id: key
+        env:
+          PRIVATE_KEY: ${{ secrets.APT_REPO_PRIVATE_KEY }}
+          PASSPHRASE: ${{ secrets.APT_REPO_PASSPHRASE }}
+          KEY_ID: ${{ vars.APT_REPO_KEY_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/apt-signing"
+          if [ -n "$PRIVATE_KEY" ] && [ -n "$KEY_ID" ]; then
+            printf '%s\n' "$PRIVATE_KEY" > "$RUNNER_TEMP/apt-signing/repo-key.asc"
+            chmod 600 "$RUNNER_TEMP/apt-signing/repo-key.asc"
+            if [ -n "$PASSPHRASE" ]; then
+              printf '%s' "$PASSPHRASE" > "$RUNNER_TEMP/apt-signing/passphrase.txt"
+              chmod 600 "$RUNNER_TEMP/apt-signing/passphrase.txt"
+            fi
+            {
+              echo "id=$KEY_ID"
+              echo "key=$RUNNER_TEMP/apt-signing/repo-key.asc"
+              echo "pass=$RUNNER_TEMP/apt-signing/passphrase.txt"
+            } >> "$GITHUB_OUTPUT"
+            echo "Repository will be GPG signed with key \`$KEY_ID\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::APT_REPO_PRIVATE_KEY or APT_REPO_KEY_ID is not configured, publishing an unsigned repository (clients need [trusted=yes])"
+            echo "Repository published **unsigned**: configure the \`APT_REPO_PRIVATE_KEY\` secret and the \`APT_REPO_KEY_ID\` variable." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build the apt repository
+        env:
+          KEY_ID: ${{ steps.key.outputs.id }}
+          KEY_FILE: ${{ steps.key.outputs.key }}
+          PASSPHRASE_FILE: ${{ steps.key.outputs.pass }}
+        run: |
+          mkdir -p pages
+          args=(--debs dist --out pages --suite stable --component main
+                --origin mp3-tagger --label "MP3 Tagger")
+          if [ -n "$KEY_ID" ]; then
+            args+=(--gpg-key-id "$KEY_ID" --gpg-key-file "$KEY_FILE"
+                   --gpg-passphrase-file "$PASSPHRASE_FILE")
+          fi
+          python3 packaging/apt/build-repo.py "${args[@]}"
+
+      - name: Verify the repository metadata
+        run: |
+          test -f pages/apt/dists/stable/Release
+          test -f pages/apt/dists/stable/main/binary-amd64/Packages
+          test -f pages/install.sh
+          sh -n pages/install.sh
+          python3 - pages/apt/dists/stable <<'PY'
+          import hashlib, os, sys
+          base = sys.argv[1]
+          release = open(os.path.join(base, "Release"), encoding="utf-8").read()
+          for field in ("Suite: stable", "Components: main", "Architectures: amd64"):
+              assert field in release, f"Release is missing {field!r}"
+          assert "SHA256:" in release, "Release has no SHA256 section"
+          entries = [
+              line.split()
+              for line in release.split("SHA256:", 1)[1].strip().splitlines()
+          ]
+          assert entries, "SHA256 section is empty"
+          for digest, size, name in entries:
+              blob = open(os.path.join(base, name), "rb").read()
+              assert len(blob) == int(size), f"size mismatch for {name}"
+              assert hashlib.sha256(blob).hexdigest() == digest, f"sha256 mismatch for {name}"
+          if os.path.exists(os.path.join(base, "InRelease")):
+              print("InRelease present")
+          print(f"Release lists {len(entries)} files, every checksum matches")
+          PY
+
+      - name: Configure GitHub Pages
+        id: deployment
+        uses: actions/configure-pages@v5
+        with:
+          # Enable Pages on first run so a fresh repository does not fail
+          # with "Get Pages site failed ... Not Found".
+          enablement: true
+
+      - name: Merge the website into the Pages site
+        run: |
+          # The landing page takes the site root; the apt repository keeps
+          # living under /apt and /install.sh stays where it is.
+          cp -r site/. pages/
+          test -f pages/index.html
+          test -f pages/apt/dists/stable/Release
+          test -f pages/install.sh
+          echo "Pages site root:"
+          ls pages | head -20
+
+      - name: Upload the repository to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Show the install command
+        run: |
+          {
+            echo "### Site and install"
+            echo "Landing page: ${{ steps.deploy.outputs.page_url }}"
+            echo '```bash'
+            echo "curl -fsSL ${{ steps.deploy.outputs.page_url }}/install.sh | sudo bash"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Attach artifacts to release
+    needs:
+      - debian-x86_64
+      - linux-packages
+      - linux-riscv64
+      - windows
+      - macos-universal
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download every packaging artifact
+        uses: actions/download-artifact@v4
+        with:
+          # The website artifact is only consumed by the Pages job.
+          pattern: "!website-dist"
+          merge-multiple: true
+          path: release
+
+      - name: Attach artifacts to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          files=(release/*)
+          if [ "${#files[@]}" -lt 21 ]; then
+            echo "expected at least 21 artifacts, found ${#files[@]}" >&2
+            printf '  %s\n' "${files[@]}" >&2
+            exit 1
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "MP3 Tagger $tag" --generate-notes
+          fi
+          gh release upload "$tag" "${files[@]}" --clobber
+          printf 'attached %d artifacts to release %s\n' "${#files[@]}" "$tag"

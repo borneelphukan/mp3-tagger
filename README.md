@@ -119,21 +119,40 @@ packaging/debian/build-deb.sh
 packaging/apt/build-repo.py --debs dist --out pages --suite stable --component main \
     --origin mp3-tagger --label "MP3 Tagger"
 
-# Build the NSIS installer (needs makensis and a release build)
-makensis -DAPP_VERSION=0.1.0 -DAPP_VERSION_NUM=0.1.0.0 \
-    -DOUTPUT_NAME=MP3Tagger-Setup-0.1.0.exe installer/mp3-tagger.nsi
+# Build a portable tarball (VERSION and ARCH are required)
+VERSION=0.1.0 ARCH=x86_64 packaging/linux/build-tarball.sh
+
+# Build an AppImage (x86_64 or aarch64)
+VERSION=0.1.0 ARCH=x86_64 packaging/linux/build-appimage.sh
+
+# Build an RPM package (requires rpmbuild)
+VERSION=0.1.0 RPM_ARCH=x86_64 packaging/rpm/build-rpm.sh
+
+# Build a Flatpak bundle (requires flatpak-builder)
+VERSION=0.1.0 ARCH=x86_64 packaging/flatpak/build-flatpak.sh
+
+# Build an Arch package (runs makepkg in Docker)
+VERSION=0.1.0 ARCH=x86_64 packaging/arch/build-arch-pkg.sh
+
+# Build the macOS disk image (macOS only, from a universal binary)
+VERSION=0.1.0 packaging/macos/build-dmg.sh
+
+# Build the Windows installer (needs Inno Setup and a release build)
+ISCC.exe /DMyAppVersion=0.1.0 /DMyVersionInfo=0.1.0.0 /DMyArch=x64 ^
+    /DMySourceExe=target\x86_64-pc-windows-msvc\release\mp3-tagger.exe ^
+    /DMyOutputBaseFilename=MP3Tagger-Setup-0.1.0-x64 installer\mp3-tagger.iss
 ```
 
-Pushing a `v*` tag runs `.github/workflows/windows-installer.yml` and
-`.github/workflows/debian.yml`, which attach the `.exe` and `.deb` to the release and republish the
-apt repository to GitHub Pages.
+Pushing a `v*` tag runs `.github/workflows/build.yml`, which builds every Linux,
+Windows and macOS artifact, attaches them to the release, and republishes the apt
+repository to GitHub Pages.
 
 ## Website
 
 The product landing page lives in `website/` (React + TypeScript + Tailwind CSS v4,
 built with Vite). See `website/README.md` for the dev commands.
 
-The Debian workflow builds it on every run and merges the output into the GitHub
+The build workflow builds it on every run and merges the output into the GitHub
 Pages site, so the landing page is served at the site root while the apt
 repository keeps living under `/apt` and `/install.sh`. The displayed version
 comes from the `Cargo.toml` version passed as `VITE_APP_VERSION`.
