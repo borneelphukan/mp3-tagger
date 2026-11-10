@@ -1,8 +1,66 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::Arc;
+
+/// Embedded cover art.
+///
+/// The bytes live behind an `Arc` so cloning metadata (which UI code does while
+/// rendering) never copies the image. A fingerprint is computed once on
+/// construction and used as the texture-cache key, instead of hashing every
+/// image on every frame.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(from = "Vec<u8>", into = "Vec<u8>")]
+pub struct AlbumArt {
+    data: Arc<[u8]>,
+    hash: u64,
+}
+
+impl AlbumArt {
+    pub fn new(data: Vec<u8>) -> Self {
+        let mut hasher = DefaultHasher::new();
+        data.hash(&mut hasher);
+        Self {
+            hash: hasher.finish(),
+            data: data.into(),
+        }
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        self.data.as_ref()
+    }
+
+    pub fn hash(&self) -> u64 {
+        self.hash
+    }
+}
+
+impl std::fmt::Debug for AlbumArt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AlbumArt")
+            .field("len", &self.data.len())
+            .field("hash", &self.hash)
+            .finish()
+    }
+}
+
+impl From<Vec<u8>> for AlbumArt {
+    fn from(data: Vec<u8>) -> Self {
+        Self::new(data)
+    }
+}
+
+impl From<AlbumArt> for Vec<u8> {
+    fn from(art: AlbumArt) -> Self {
+        art.data.to_vec()
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+// The LLM returns only the text fields, so every field must be optional on the
+// wire. Without this, parsing a valid LLM response fails on `album_art`.
+#[serde(default)]
 pub struct SongMetadata {
     pub title: String,
     pub artist: String,
@@ -22,7 +80,7 @@ pub struct SongMetadata {
     pub lyrics: String,
     pub bpm: String,
     pub isrc: String,
-    pub album_art: Option<Vec<u8>>,
+    pub album_art: Option<AlbumArt>,
     pub album_art_mime: Option<String>,
 }
 
@@ -131,7 +189,6 @@ pub struct Song {
     pub metadata: SongMetadata,
     pub original_metadata: SongMetadata,
     pub has_changes: bool,
-    pub last_modified: DateTime<Utc>,
 }
 
 impl Song {
@@ -142,26 +199,31 @@ impl Song {
             metadata,
             original_metadata: original,
             has_changes: false,
-            last_modified: Utc::now(),
         }
     }
 
     pub fn mark_changed(&mut self) {
         self.has_changes = true;
-        self.last_modified = Utc::now();
     }
 
     pub fn save_changes(&mut self) {
+        // Album artwork is reference counted, so this is cheap even for large
+        // embedded images.
         self.original_metadata = self.metadata.clone();
         self.has_changes = false;
     }
 
-    pub fn file_name(&self) -> String {
+    /// Borrowed file name, so rendering a library of untitled songs does not
+    /// allocate a new `String` on every frame.
+    pub fn file_name_str(&self) -> &str {
         self.path
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("Unknown")
-            .to_string()
+    }
+
+    pub fn file_name(&self) -> String {
+        self.file_name_str().to_owned()
     }
 
     pub fn display_name(&self) -> String {
@@ -210,4 +272,29 @@ pub enum ThemePreference {
     Dark,
     #[default]
     System,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn llm_response_without_art_deserializes() {
+        // The LLM only returns text fields; artwork is fetched separately.
+        let metadata: SongMetadata =
+            serde_json::from_str(r#"{"title":"Song","artist":"Artist"}"#).unwrap();
+        assert_eq!(metadata.title, "Song");
+        assert_eq!(metadata.artist, "Artist");
+        assert!(metadata.album_art.is_none());
+        assert!(metadata.album.is_empty());
+    }
+
+    #[test]
+    fn album_art_round_trips_through_serde() {
+        let art = AlbumArt::new(vec![1, 2, 3, 4]);
+        let json = serde_json::to_string(&art).unwrap();
+        let decoded: AlbumArt = serde_json::from_str(&json).unwrap();
+        assert_eq!(art, decoded);
+        assert_eq!(decoded.bytes(), &[1, 2, 3, 4]);
+    }
 }

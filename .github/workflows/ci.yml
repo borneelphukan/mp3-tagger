@@ -3,7 +3,23 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - "assets/**"
+      - "packaging/**"
+      - ".github/workflows/ci.yml"
   pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - "assets/**"
+      - "packaging/**"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 concurrency:
@@ -16,11 +32,15 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # CI always builds from a warm cache; incremental artifacts only bloat the
+  # cache and increase runner memory/disk usage.
+  CARGO_INCREMENTAL: 0
 
 jobs:
   check:
     name: fmt, clippy and tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -58,12 +78,14 @@ jobs:
       - name: Tests
         run: cargo test --workspace --locked
 
-      - name: Release build
-        run: cargo build --release --locked
+      # The release profile is built by the Release workflow (and its tag
+      # quality gate), so rebuilding it here only duplicated a multi-minute
+      # compile without validating anything extra.
 
   linux-assets:
     name: packaging assets are consistent
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 

@@ -12,7 +12,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  pull_request:
+    # Ignored for tag pushes, so releasing a tag never depends on which files
+    # changed. Branch pushes only rebuild packages/site for relevant commits.
     paths:
       - "src/**"
       - "tests/**"
@@ -23,6 +24,19 @@ on:
       - "packaging/**"
       - "assets/**"
       - "website/**"
+      - ".github/workflows/release.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - "installer/**"
+      - "packaging/**"
+      - "assets/**"
+      # Website-only changes are validated by the lightweight Website workflow
+      # instead of triggering the full packaging matrix.
       - ".github/workflows/release.yml"
   workflow_dispatch:
   schedule:
@@ -40,6 +54,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
 
 jobs:
   metadata:
@@ -68,6 +83,7 @@ jobs:
   debian-x86_64:
     name: Debian package (x86_64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -87,6 +103,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
+          key: linux-x86_64-release
 
       - name: Build release binary
         run: cargo build --release --locked
@@ -135,7 +152,12 @@ jobs:
   linux-packages:
     name: Linux packages (${{ matrix.label }})
     needs: metadata
-    if: github.event_name != 'schedule'
+    # Full packaging is only needed for tags, pull-request validation and
+    # manual runs. Ordinary pushes to main only need the Debian package used by
+    # the apt repository and the website, so skip these expensive jobs.
+    if: >-
+      github.event_name != 'schedule' &&
+      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v'))
     strategy:
       fail-fast: false
       matrix:
@@ -147,6 +169,7 @@ jobs:
             arch: aarch64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -168,6 +191,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
+          key: linux-${{ matrix.arch }}-release
 
       - name: Build release binary
         run: cargo build --release --locked
@@ -255,12 +279,20 @@ jobs:
   linux-riscv64:
     name: Linux packages (RISC-V 64)
     needs: metadata
-    if: github.event_name != 'schedule'
+    if: >-
+      github.event_name != 'schedule' &&
+      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@1.98.1
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+          key: linux-riscv64-release
 
       - name: Install cross
         uses: taiki-e/install-action@v2
@@ -325,7 +357,9 @@ jobs:
   windows:
     name: Windows (${{ matrix.label }})
     needs: metadata
-    if: github.event_name != 'schedule'
+    if: >-
+      github.event_name != 'schedule' &&
+      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v'))
     strategy:
       fail-fast: false
       matrix:
@@ -340,6 +374,7 @@ jobs:
             arch: arm64
             target: aarch64-pc-windows-msvc
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -350,6 +385,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
+          key: windows-${{ matrix.target }}-release
 
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}
@@ -462,8 +498,11 @@ jobs:
   macos-universal:
     name: Disk image (Universal)
     needs: metadata
-    if: github.event_name != 'schedule'
+    if: >-
+      github.event_name != 'schedule' &&
+      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: macos-15
+    timeout-minutes: 60
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
@@ -476,6 +515,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
+          key: macos-universal-release
 
       - name: Build release binaries
         run: |
@@ -508,6 +548,7 @@ jobs:
     name: Build website
     needs: metadata
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -522,7 +563,7 @@ jobs:
         env:
           VITE_APP_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
-          npm ci
+          npm ci --prefer-offline --no-audit --no-fund
           npm run build
 
       - name: Upload the site artifact
@@ -681,6 +722,7 @@ jobs:
     name: Quality gate (fmt, clippy, tests)
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -713,8 +755,8 @@ jobs:
       - name: Tests
         run: cargo test --workspace --locked
 
-      - name: Release build
-        run: cargo build --release --locked
+      # Every packaging job below performs a real release build, so building
+      # the release profile here as well would only add a duplicate compile.
 
   release:
     name: Attach artifacts to release

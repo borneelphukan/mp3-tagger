@@ -2,7 +2,6 @@ use crate::models::LLMSettings;
 use crate::services::llm::get_tokio_handle;
 use crate::ui::state::{AppMessage, AppState};
 use eframe::egui;
-use std::sync::{Arc, Mutex};
 
 pub struct SettingsView;
 
@@ -13,7 +12,6 @@ impl SettingsView {
         draft: &mut LLMSettings,
         local_mode: &mut bool,
         open: &mut bool,
-        tx: &Arc<Mutex<Option<AppMessage>>>,
     ) {
         let mut close = false;
         egui::Window::new("AI Settings")
@@ -144,17 +142,18 @@ impl SettingsView {
                                 draft.enabled = false;
                             }
                             let service = state.llm_service.clone();
-                            let sender = tx.clone();
+                            let sender = state.message_tx.clone();
                             if let Some(handle) = get_tokio_handle() {
                                 handle.spawn(async move {
                                     let result = service
                                         .test_connection(&settings)
                                         .await
                                         .map_err(|e| e.to_string());
-                                    if let Ok(mut slot) = sender.lock() {
-                                        *slot = Some(AppMessage::LlmTestResult(result));
-                                    }
+                                    let _ = sender.send(AppMessage::LlmTestResult(result));
                                 });
+                            } else {
+                                state.error_message =
+                                    Some("The async runtime is not available".to_string());
                             }
                         }
                     });

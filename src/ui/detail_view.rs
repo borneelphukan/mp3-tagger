@@ -1,13 +1,12 @@
-use crate::models::SongMetadata;
+use crate::models::{AlbumArt, SongMetadata};
 use crate::services::llm::get_tokio_handle;
 use crate::ui::state::{AppMessage, AppState, View};
 use eframe::egui;
-use std::sync::{Arc, Mutex};
 
 pub struct DetailView;
 
 impl DetailView {
-    pub fn show(ctx: &egui::Context, state: &mut AppState, tx: &Arc<Mutex<Option<AppMessage>>>) {
+    pub fn show(ctx: &egui::Context, state: &mut AppState) {
         let idx = match state.current_view {
             View::Detail(i) => i,
             _ => return,
@@ -30,9 +29,8 @@ impl DetailView {
         let can_fill = song.metadata.has_required_for_llm()
             && state.settings.llm.is_configured()
             && !state.is_fetching;
+        // `AlbumArt` is reference counted, so this clone does not copy pixels.
         let album_art = song.metadata.album_art.clone();
-        let album_art_mime = song.metadata.album_art_mime.clone();
-        let path_display = song.path.display().to_string();
         // Lyrics use a multiline editor below; include every other tag here.
         let fields: Vec<(usize, String, String)> = SongMetadata::field_names()
             .iter()
@@ -76,7 +74,7 @@ impl DetailView {
                         state.start_metadata_fetch(idx);
                         let llm_service = state.llm_service.clone();
                         let settings = state.settings.llm.clone();
-                        let tx_clone = tx.clone();
+                        let sender = state.message_tx.clone();
                         let fetch_title = title_for_async.clone();
                         let fetch_artist = artist_for_async.clone();
 
@@ -106,17 +104,20 @@ impl DetailView {
                                             )
                                             .await
                                         {
-                                            metadata.album_art = Some(bytes);
+                                            metadata.album_art = Some(AlbumArt::new(bytes));
                                             metadata.album_art_mime = Some(mime);
                                         }
                                         Ok(metadata)
                                     }
                                     Err(error) => Err(error),
                                 };
-                                if let Ok(mut lock) = tx_clone.lock() {
-                                    *lock = Some(AppMessage::MetadataFetched(idx, result));
-                                }
+                                let _ = sender.send(AppMessage::MetadataFetched(idx, result));
                             });
+                        } else {
+                            state.is_fetching = false;
+                            state.fetch_index = None;
+                            state.error_message =
+                                Some("The async runtime is not available".to_string());
                         }
                     }
 
@@ -168,34 +169,11 @@ impl DetailView {
                     egui::vec2(content_width * 0.35, content_height),
                     egui::Layout::top_down(egui::Align::Center),
                     |ui| {
-                        Self::show_album_art(
-                            ui,
-                            state,
-                            idx,
-                            &album_art,
-                            &album_art_mime,
-                            &path_display,
-                        );
+                        Self::show_album_art(ui, state, idx, &album_art);
                     },
                 );
             });
         });
-
-        // Error toast
-        let error_msg = state.error_message.clone();
-        if let Some(error) = error_msg {
-            egui::Window::new("Error")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-                .show(ctx, |ui| {
-                    ui.colored_label(egui::Color32::RED, &error);
-                    ui.separator();
-                    if ui.button("OK").clicked() {
-                        state.error_message = None;
-                    }
-                });
-        }
 
         if state.confirm_discard_changes {
             egui::Window::new("Unsaved changes")
@@ -260,13 +238,11 @@ impl DetailView {
         ui: &mut egui::Ui,
         state: &mut AppState,
         idx: usize,
-        album_art: &Option<Vec<u8>>,
-        _album_art_mime: &Option<String>,
-        path_display: &str,
+        album_art: &Option<AlbumArt>,
     ) {
         let texture = album_art
             .as_ref()
-            .and_then(|bytes| state.album_art_texture(ui.ctx(), path_display, bytes));
+            .and_then(|art| state.detail_album_art(ui.ctx(), art));
         ui.vertical_centered(|ui| {
             ui.heading("Album Artwork");
             ui.separator();
@@ -301,7 +277,7 @@ impl DetailView {
                                 _ => "image/jpeg",
                             };
                             let song = &mut state.songs[idx];
-                            song.metadata.album_art = Some(bytes);
+                            song.metadata.album_art = Some(AlbumArt::new(bytes));
                             song.metadata.album_art_mime = Some(mime.to_string());
                             song.mark_changed();
                             state.pending_changes = true;

@@ -10,7 +10,9 @@ mod models;
 mod services;
 mod ui;
 
-#[tokio::main]
+// Two worker threads are plenty for a couple of HTTP requests and avoid the
+// default "one worker per CPU" stack/allocator footprint.
+#[tokio::main(worker_threads = 2)]
 async fn main() -> Result<(), eframe::Error> {
     let icon = load_icon();
     let mut viewport = egui::ViewportBuilder::default()

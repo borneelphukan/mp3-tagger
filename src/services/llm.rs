@@ -2,7 +2,6 @@ use crate::models::{AppError, LLMSettings, Result, SongMetadata};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
-use std::time::Duration;
 use tokio::runtime::Handle;
 
 static TOKIO_HANDLE: OnceLock<Handle> = OnceLock::new();
@@ -52,10 +51,7 @@ pub struct LlmService {
 impl LlmService {
     pub fn new() -> Self {
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(60))
-                .build()
-                .unwrap(),
+            client: crate::services::http::client().clone(),
         }
     }
 

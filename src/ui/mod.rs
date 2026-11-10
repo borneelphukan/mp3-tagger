@@ -6,23 +6,25 @@ pub mod state;
 use crate::models::{LLMSettings, ThemePreference};
 use crate::ui::state::{AppMessage, AppState, View};
 use eframe::egui;
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{self, Receiver};
 
 pub struct Mp3TaggerApp {
     state: AppState,
-    message_tx: Arc<Mutex<Option<AppMessage>>>,
+    message_rx: Receiver<AppMessage>,
     show_ai_settings: bool,
     ai_settings_draft: LLMSettings,
     ai_settings_local_mode: bool,
     show_about: bool,
+    applied_theme: ThemePreference,
 }
 
 impl Mp3TaggerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let state = AppState::new().expect("Failed to initialize app state");
+        let (message_tx, message_rx) = mpsc::channel();
+        let state = AppState::new(message_tx).expect("Failed to initialize app state");
         Self::setup_style(&cc.egui_ctx);
         Self::apply_theme(&cc.egui_ctx, state.settings.theme);
-        let message_tx = Arc::new(Mutex::new(None));
+        let applied_theme = state.settings.theme;
 
         let ai_settings_draft = state.settings.llm.clone();
         let ai_settings_local_mode = state
@@ -33,11 +35,12 @@ impl Mp3TaggerApp {
             .is_some_and(|url| url.contains("localhost") || url.contains("127.0.0.1"));
         Self {
             state,
-            message_tx,
+            message_rx,
             show_ai_settings: false,
             ai_settings_draft,
             ai_settings_local_mode,
             show_about: false,
+            applied_theme,
         }
     }
 
@@ -145,63 +148,57 @@ impl Mp3TaggerApp {
             ThemePreference::System => egui::ThemePreference::System,
         });
     }
+
+    fn show_error_popup(&mut self, ctx: &egui::Context) {
+        let Some(error) = self.state.error_message.clone() else {
+            return;
+        };
+
+        let mut dismiss = false;
+        egui::Window::new("Error")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.colored_label(egui::Color32::RED, &error);
+                ui.separator();
+                if ui.button("OK").clicked() {
+                    dismiss = true;
+                }
+            });
+
+        if dismiss {
+            self.state.error_message = None;
+        }
+    }
+
+    fn handle_message(&mut self, message: AppMessage) {
+        match message {
+            AppMessage::SongLoaded(result) => self.state.song_loaded(result),
+            AppMessage::MetadataFetched(idx, result) => {
+                self.state.complete_metadata_fetch(idx, result);
+            }
+            AppMessage::LlmTestResult(result) => match result {
+                Ok(_) => self.state.error_message = Some("Connection test successful!".to_string()),
+                Err(error) => {
+                    self.state.error_message = Some(format!("Connection test failed: {error}"))
+                }
+            },
+        }
+    }
 }
 
 impl eframe::App for Mp3TaggerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        Self::apply_theme(ctx, self.state.settings.theme);
-        // Process messages
-        if let Ok(mut lock) = self.message_tx.lock() {
-            if let Some(msg) = lock.take() {
-                match msg {
-                    AppMessage::LoadSongs(paths) => self.state.add_songs(paths),
-                    AppMessage::SongLoaded(idx, result) => {
-                        if let Ok(song) = result {
-                            if idx < self.state.songs.len() {
-                                self.state.songs[idx] = song;
-                            }
-                        }
-                    }
-                    AppMessage::MetadataFetched(idx, result) => {
-                        self.state.complete_metadata_fetch(idx, result);
-                    }
-                    AppMessage::SaveSong(idx) => {
-                        if let Err(e) = crate::services::metadata::MetadataService::write_metadata(
-                            &mut self.state.songs[idx],
-                        ) {
-                            self.state.error_message = Some(e.to_string());
-                        }
-                    }
-                    AppMessage::DeleteSong(idx) => self.state.delete_song(idx),
-                    AppMessage::ChangeView(view) => self.state.current_view = view,
-                    AppMessage::UpdateMetadata(idx, field, value) => {
-                        self.state.update_metadata_field(idx, field, value);
-                    }
-                    AppMessage::ToggleFillDataButton(_idx) => {
-                        // Handled in detail view
-                    }
-                    AppMessage::SetError(msg) => self.state.error_message = Some(msg),
-                    AppMessage::ClearError => self.state.error_message = None,
-                    AppMessage::SettingsSaved => {
-                        if let Err(e) = self.state.save_settings() {
-                            self.state.error_message = Some(e.to_string());
-                        }
-                    }
-                    AppMessage::TestLlmConnection => {
-                        // Handled in settings view
-                    }
-                    AppMessage::LlmTestResult(result) => match result {
-                        Ok(_) => {
-                            self.state.error_message =
-                                Some("Connection test successful!".to_string())
-                        }
-                        Err(e) => {
-                            self.state.error_message =
-                                Some(format!("Connection test failed: {}", e))
-                        }
-                    },
-                }
-            }
+        if self.state.settings.theme != self.applied_theme {
+            Self::apply_theme(ctx, self.state.settings.theme);
+            self.applied_theme = self.state.settings.theme;
+        }
+
+        // Drain every queued result, not just the last one. Background song
+        // loading can produce many messages between frames.
+        while let Ok(message) = self.message_rx.try_recv() {
+            self.handle_message(message);
         }
 
         // Menu bar
@@ -222,7 +219,7 @@ impl eframe::App for Mp3TaggerApp {
                     }
                     ui.separator();
                     if ui.button("Quit").clicked() {
-                        std::process::exit(0);
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
 
@@ -287,12 +284,8 @@ impl eframe::App for Mp3TaggerApp {
 
         // Main content
         match self.state.current_view {
-            View::Grid => {
-                crate::ui::grid_view::GridView::show(ctx, &mut self.state, &self.message_tx)
-            }
-            View::Detail(_) => {
-                crate::ui::detail_view::DetailView::show(ctx, &mut self.state, &self.message_tx)
-            }
+            View::Grid => crate::ui::grid_view::GridView::show(ctx, &mut self.state),
+            View::Detail(_) => crate::ui::detail_view::DetailView::show(ctx, &mut self.state),
         }
 
         if self.show_ai_settings {
@@ -302,7 +295,6 @@ impl eframe::App for Mp3TaggerApp {
                 &mut self.ai_settings_draft,
                 &mut self.ai_settings_local_mode,
                 &mut self.show_ai_settings,
-                &self.message_tx,
             );
         }
 
@@ -310,8 +302,10 @@ impl eframe::App for Mp3TaggerApp {
             Self::show_about_popup(ctx, &mut self.show_about);
         }
 
-        // Request repaint if fetching
-        if self.state.is_fetching {
+        self.show_error_popup(ctx);
+
+        // Async work has no way to wake egui itself, so poll while it runs.
+        if self.state.is_fetching || self.state.loading_count > 0 {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
     }

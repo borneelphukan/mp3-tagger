@@ -1,4 +1,5 @@
-use crate::models::{AppError, Result, Song, SongMetadata};
+use crate::models::{AlbumArt, AppError, Result, Song, SongMetadata};
+use lofty::config::ParseOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::probe::Probe;
@@ -8,18 +9,32 @@ use std::path::Path;
 pub struct MetadataService;
 
 impl MetadataService {
-    pub fn read_metadata(path: &Path) -> Result<SongMetadata> {
-        let tagged_file = Probe::open(path)
+    /// Open a file without decoding audio properties.
+    ///
+    /// The UI never displays bitrate/sample rate, and `read_properties(true)`
+    /// makes lofty scan audio frames, which is the most expensive part of
+    /// adding a large library.
+    fn read_tagged_file(path: &Path) -> Result<lofty::file::TaggedFile> {
+        Probe::open(path)
             .map_err(|e| AppError::AudioMetadataParse(e.to_string()))?
+            .options(ParseOptions::new().read_properties(false))
             .read()
-            .map_err(|e| AppError::AudioMetadataParse(e.to_string()))?;
+            .map_err(|e| AppError::AudioMetadataParse(e.to_string()))
+    }
+
+    pub fn read_metadata(path: &Path) -> Result<SongMetadata> {
+        let tagged_file = Self::read_tagged_file(path)?;
 
         let mut metadata = SongMetadata::default();
 
-        if let Some(tag) = tagged_file.primary_tag() {
+        if let Some(tag) = tagged_file
+            .primary_tag()
+            .or_else(|| tagged_file.first_tag())
+        {
             Self::extract_tag_data(tag, &mut metadata);
-        } else if let Some(tag) = tagged_file.first_tag() {
-            Self::extract_tag_data(tag, &mut metadata);
+            // Artwork normally lives in the same tag. Checking it here also
+            // covers FLAC/Ogg formats whose pictures are not in ID3v2/MP4.
+            Self::extract_artwork(tag, &mut metadata);
         }
 
         if metadata.album_art.is_none() {
@@ -83,21 +98,16 @@ impl MetadataService {
     }
 
     fn extract_artwork(tag: &Tag, metadata: &mut SongMetadata) {
-        for picture in tag.pictures() {
-            metadata.album_art = Some(picture.data().to_vec());
+        if let Some(picture) = tag.pictures().first() {
+            metadata.album_art = Some(AlbumArt::new(picture.data().to_vec()));
             if let Some(mime) = picture.mime_type() {
                 metadata.album_art_mime = Some(mime.to_string());
             }
-            break;
         }
     }
 
     pub fn write_metadata(song: &mut Song) -> Result<()> {
-        let tagged_file = Probe::open(&song.path)
-            .map_err(|e| AppError::AudioMetadataParse(e.to_string()))?
-            .read()
-            .map_err(|e| AppError::AudioMetadataParse(e.to_string()))?;
-        let mut tagged_file = tagged_file;
+        let mut tagged_file = Self::read_tagged_file(&song.path)?;
 
         let primary_tag_type = tagged_file.primary_tag_type();
         let tag = match tagged_file.tag_mut(primary_tag_type) {
@@ -130,7 +140,7 @@ impl MetadataService {
                 "image/bmp" => MimeType::Bmp,
                 _ => MimeType::Jpeg,
             };
-            let picture = Picture::unchecked(art_data.clone())
+            let picture = Picture::unchecked(art_data.bytes().to_vec())
                 .pic_type(PictureType::CoverFront)
                 .mime_type(mime_type)
                 .build();

@@ -107,6 +107,19 @@ cargo build --release
 cargo run
 ```
 
+### Faster builds
+
+- `cargo check` and `cargo clippy` are much faster than linking while iterating.
+- Debug builds keep line-table-only debug info (`debug = 1`), which cuts the
+  size of `target/` substantially compared with the default.
+- Release builds use thin LTO and `panic = "abort"`: links are much faster than
+  fat LTO and the resulting binary is smaller.
+- For even faster local links, install `mold` or `lld` and point
+  `RUSTFLAGS="-C link-arg=-fuse-ld=lld"` at it (not enabled by default because
+  the linker is not available on every platform).
+- The workspace never includes the `wgpu` renderer or every `image` decoder;
+  both were removed because the app uses glow and only PNG/JPEG/GIF/BMP art.
+
 ### Packaging
 
 ```bash

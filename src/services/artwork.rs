@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::time::Duration;
 
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
+
 #[derive(Deserialize)]
 struct ItunesSearchResponse {
     results: Vec<ItunesSearchResult>,
@@ -18,13 +20,11 @@ pub async fn fetch_cover_art(
     album: &str,
 ) -> Result<(Vec<u8>, String), String> {
     let term = format!("{} {} {}", artist, album, title);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::services::http::client();
     let search: ItunesSearchResponse = client
         .get("https://itunes.apple.com/search")
         .query(&[("term", term.as_str()), ("entity", "song"), ("limit", "5")])
+        .timeout(REQUEST_TIMEOUT)
         .send()
         .await
         .map_err(|e| e.to_string())?
@@ -42,6 +42,7 @@ pub async fn fetch_cover_art(
         .replace("100x100bb", "600x600bb");
     let response = client
         .get(url)
+        .timeout(REQUEST_TIMEOUT)
         .send()
         .await
         .map_err(|e| e.to_string())?
@@ -55,7 +56,19 @@ pub async fn fetch_cover_art(
         .unwrap_or("image/jpeg")
         .to_string();
     let bytes = response.bytes().await.map_err(|e| e.to_string())?.to_vec();
-    image::load_from_memory(&bytes)
-        .map_err(|_| "The cover art response was not a supported image".to_string())?;
+
+    // Only inspect the header here. Fully decoding the image just to validate
+    // it wasted CPU and memory; the texture loader decodes (and bounds) it once
+    // when it is actually displayed.
+    match image::guess_format(&bytes) {
+        Ok(
+            image::ImageFormat::Png
+            | image::ImageFormat::Jpeg
+            | image::ImageFormat::Gif
+            | image::ImageFormat::Bmp,
+        ) => {}
+        _ => return Err("The cover art response was not a supported image".to_string()),
+    }
+
     Ok((bytes, mime))
 }

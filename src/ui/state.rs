@@ -1,10 +1,11 @@
-use crate::models::{AppSettings, Song, SongMetadata};
+use crate::models::{AlbumArt, AppSettings, Song, SongMetadata};
 use crate::services::llm::LlmService;
 use crate::services::metadata::MetadataService;
 use crate::services::settings::SettingsService;
 use eframe::egui;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::sync::mpsc::Sender;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum View {
@@ -21,44 +22,82 @@ pub enum LibraryViewMode {
 
 #[derive(Debug)]
 pub enum AppMessage {
-    LoadSongs(Vec<PathBuf>),
-    SongLoaded(usize, Result<Song>),
+    /// A song finished loading on the background library thread.
+    SongLoaded(Result<Song>),
     MetadataFetched(usize, Result<SongMetadata>),
-    SaveSong(usize),
-    DeleteSong(usize),
-    ChangeView(View),
-    UpdateMetadata(usize, usize, String),
-    ToggleFillDataButton(usize),
-    SetError(String),
-    ClearError,
-    SettingsSaved,
-    TestLlmConnection,
     LlmTestResult(Result<()>),
 }
 
-impl Clone for AppMessage {
-    fn clone(&self) -> Self {
-        match self {
-            Self::LoadSongs(paths) => Self::LoadSongs(paths.clone()),
-            Self::SongLoaded(idx, result) => Self::SongLoaded(*idx, result.clone()),
-            Self::MetadataFetched(idx, result) => Self::MetadataFetched(*idx, result.clone()),
-            Self::SaveSong(idx) => Self::SaveSong(*idx),
-            Self::DeleteSong(idx) => Self::DeleteSong(*idx),
-            Self::ChangeView(view) => Self::ChangeView(view.clone()),
-            Self::UpdateMetadata(idx, field, value) => {
-                Self::UpdateMetadata(*idx, *field, value.clone())
-            }
-            Self::ToggleFillDataButton(idx) => Self::ToggleFillDataButton(*idx),
-            Self::SetError(msg) => Self::SetError(msg.clone()),
-            Self::ClearError => Self::ClearError,
-            Self::SettingsSaved => Self::SettingsSaved,
-            Self::TestLlmConnection => Self::TestLlmConnection,
-            Self::LlmTestResult(result) => Self::LlmTestResult(result.clone()),
-        }
-    }
+pub type Result<T> = std::result::Result<T, String>;
+
+/// Bounded texture cache.
+///
+/// Previously every decoded cover art image was kept for the lifetime of the
+/// process, so browsing a large library could consume gigabytes of GPU memory.
+/// Entries are now inserted in order and the oldest are evicted once the cap is
+/// reached.
+pub struct TextureCache {
+    textures: HashMap<u64, egui::TextureHandle>,
+    order: VecDeque<u64>,
+    /// Images that failed to decode. Without this, a corrupt cover would be
+    /// re-decoded on every frame.
+    failed: HashSet<u64>,
+    max_entries: usize,
 }
 
-pub type Result<T> = std::result::Result<T, String>;
+impl TextureCache {
+    fn new(max_entries: usize) -> Self {
+        Self {
+            textures: HashMap::with_capacity(max_entries.min(64)),
+            order: VecDeque::with_capacity(max_entries.min(64)),
+            failed: HashSet::new(),
+            max_entries,
+        }
+    }
+
+    pub fn get_or_load(
+        &mut self,
+        ctx: &egui::Context,
+        art: &AlbumArt,
+        max_side: u32,
+    ) -> Option<egui::TextureHandle> {
+        // `AlbumArt` fingerprints its bytes once, so this lookup is a single
+        // map probe instead of hashing the whole image on every frame.
+        let key = art.hash() ^ (u64::from(max_side) << 32);
+
+        if let Some(texture) = self.textures.get(&key) {
+            return Some(texture.clone());
+        }
+        if self.failed.contains(&key) {
+            return None;
+        }
+
+        let Some(image) = crate::services::images::decode_thumbnail(art.bytes(), max_side) else {
+            self.failed.insert(key);
+            return None;
+        };
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(
+            [image.width() as usize, image.height() as usize],
+            image.as_raw(),
+        );
+        let texture = ctx.load_texture(
+            format!("album-art-{key}"),
+            color_image,
+            egui::TextureOptions::LINEAR,
+        );
+
+        while self.textures.len() >= self.max_entries {
+            let Some(oldest) = self.order.pop_front() else {
+                break;
+            };
+            self.textures.remove(&oldest);
+        }
+
+        self.textures.insert(key, texture.clone());
+        self.order.push_back(key);
+        Some(texture)
+    }
+}
 
 pub struct AppState {
     pub songs: Vec<Song>,
@@ -72,12 +111,18 @@ pub struct AppState {
     pub settings_service: SettingsService,
     pub pending_changes: bool,
     pub library_view_mode: LibraryViewMode,
-    pub album_art_textures: HashMap<String, egui::TextureHandle>,
+    /// Textures for the small library tiles.
+    pub album_art_textures: TextureCache,
+    /// Textures for the larger detail-view preview, capped separately so
+    /// browsing many songs cannot grow this without bound.
+    pub detail_album_art_textures: TextureCache,
+    pub loading_count: usize,
+    pub message_tx: Sender<AppMessage>,
     pub confirm_discard_changes: bool,
 }
 
 impl AppState {
-    pub fn new() -> Result<Self> {
+    pub fn new(message_tx: Sender<AppMessage>) -> Result<Self> {
         let settings_service = SettingsService::new().map_err(|e| e.to_string())?;
         let settings = settings_service.load().map_err(|e| e.to_string())?;
 
@@ -93,25 +138,59 @@ impl AppState {
             settings_service,
             pending_changes: false,
             library_view_mode: LibraryViewMode::List,
-            album_art_textures: HashMap::new(),
+            album_art_textures: TextureCache::new(512),
+            detail_album_art_textures: TextureCache::new(8),
+            loading_count: 0,
+            message_tx,
             confirm_discard_changes: false,
         })
     }
 
+    /// Read tags on a background thread and stream results back to the UI.
+    ///
+    /// Tag parsing (especially embedded artwork) is I/O and CPU heavy. Doing it
+    /// inline froze the window while a folder was added.
     pub fn add_songs(&mut self, paths: Vec<PathBuf>) {
-        for path in paths {
-            if let Ok(song) = MetadataService::load_song(&path) {
-                self.songs.push(song);
+        if paths.is_empty() {
+            return;
+        }
+
+        let count = paths.len();
+        self.loading_count += count;
+        self.pending_changes = true;
+
+        let sender = self.message_tx.clone();
+        let spawned = std::thread::Builder::new()
+            .name("library-loader".to_owned())
+            .spawn(move || {
+                for path in paths {
+                    let song = MetadataService::load_song(&path).map_err(|e| e.to_string());
+                    if sender.send(AppMessage::SongLoaded(song)).is_err() {
+                        break;
+                    }
+                }
+            });
+
+        if let Err(error) = spawned {
+            self.loading_count = self.loading_count.saturating_sub(count);
+            self.error_message = Some(format!("Could not start loading songs: {error}"));
+        }
+    }
+
+    pub fn song_loaded(&mut self, result: Result<Song>) {
+        self.loading_count = self.loading_count.saturating_sub(1);
+        match result {
+            Ok(song) => self.songs.push(song),
+            Err(error) => {
+                self.error_message = Some(format!("Could not read a song's metadata: {error}"))
             }
         }
-        self.pending_changes = true;
     }
 
     pub fn can_go_back(&self) -> bool {
         matches!(self.current_view, View::Detail(_)) && !self.has_unsaved_changes()
     }
 
-    #[allow(dead_code)]
     pub fn has_unsaved_changes(&self) -> bool {
         if let View::Detail(idx) = self.current_view {
             if idx < self.songs.len() {
@@ -141,28 +220,13 @@ impl AppState {
         self.selected_index = None;
     }
 
-    pub fn album_art_texture(
+    pub fn detail_album_art(
         &mut self,
         ctx: &egui::Context,
-        path: &str,
-        bytes: &[u8],
+        art: &AlbumArt,
     ) -> Option<egui::TextureHandle> {
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        path.hash(&mut hasher);
-        bytes.hash(&mut hasher);
-        let key = format!("album-art-{}", hasher.finish());
-        if !self.album_art_textures.contains_key(&key) {
-            let image = image::load_from_memory(bytes).ok()?;
-            let color_image = egui::ColorImage::from_rgba_unmultiplied(
-                [image.width() as usize, image.height() as usize],
-                image.to_rgba8().as_flat_samples().as_slice(),
-            );
-            let texture = ctx.load_texture(&key, color_image, Default::default());
-            self.album_art_textures.insert(key.clone(), texture);
-        }
-        self.album_art_textures.get(&key).cloned()
+        // 320px covers the 300px detail preview with a little headroom.
+        self.detail_album_art_textures.get_or_load(ctx, art, 320)
     }
 
     pub fn open_song_detail(&mut self, index: usize) {
@@ -194,11 +258,18 @@ impl AppState {
 
     pub fn save_current_song(&mut self) -> Result<()> {
         if let View::Detail(idx) = self.current_view {
-            if idx < self.songs.len() {
-                MetadataService::write_metadata(&mut self.songs[idx]).map_err(|e| e.to_string())?;
-                self.pending_changes = self.songs.iter().any(|s| s.has_changes);
-            }
+            self.save_song_at(idx)?;
         }
+        Ok(())
+    }
+
+    pub fn save_song_at(&mut self, index: usize) -> Result<()> {
+        let song = self
+            .songs
+            .get_mut(index)
+            .ok_or_else(|| "That song is no longer in the library".to_string())?;
+        MetadataService::write_metadata(song).map_err(|e| e.to_string())?;
+        self.pending_changes = self.songs.iter().any(|s| s.has_changes);
         Ok(())
     }
 
@@ -238,19 +309,6 @@ impl AppState {
                     "Could not fetch the song’s metadata. Please enter the metadata manually"
                         .to_string(),
                 );
-            }
-        }
-    }
-
-    pub fn delete_song(&mut self, index: usize) {
-        if index < self.songs.len() {
-            self.songs.remove(index);
-            self.pending_changes = true;
-            if let View::Detail(idx) = self.current_view {
-                if idx >= index {
-                    self.current_view = View::Grid;
-                    self.selected_index = None;
-                }
             }
         }
     }

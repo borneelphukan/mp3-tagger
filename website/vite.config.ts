@@ -6,4 +6,9 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   base: "/mp3-tagger/",
   plugins: [react(), tailwindcss()],
+  build: {
+    // Skipping the gzip-size report keeps CI builds a little faster; the
+    // output is still minified by esbuild.
+    reportCompressedSize: false,
+  },
 });
