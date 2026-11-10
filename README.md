@@ -143,9 +143,10 @@ ISCC.exe /DMyAppVersion=0.1.0 /DMyVersionInfo=0.1.0.0 /DMyArch=x64 ^
     /DMyOutputBaseFilename=MP3Tagger-Setup-0.1.0-x64 installer\mp3-tagger.iss
 ```
 
-Pushing a `v*` tag runs `.github/workflows/build.yml`, which builds every Linux,
-Windows and macOS artifact, attaches them to the release, and republishes the apt
-repository to GitHub Pages.
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which first passes a
+quality gate (`fmt`, `clippy -D warnings`, tests) on the tagged commit, then
+builds every Linux, Windows and macOS artifact, attaches them plus a `SHA256SUMS`
+manifest to the release, and republishes the apt repository to GitHub Pages.
 
 ## Website
 

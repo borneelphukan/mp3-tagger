@@ -1,6 +1,6 @@
 ; MP3 Tagger - Inno Setup installer
 ;
-; Compiled by .github/workflows/build.yml from the project root, for example:
+; Compiled by .github/workflows/release.yml from the project root, for example:
 ;   ISCC.exe /DMyAppVersion=0.1.0 /DMyVersionInfo=0.1.0.0 /DMyArch=x64 ^
 ;            /DMySourceExe=...\target\x86_64-pc-windows-msvc\release\mp3-tagger.exe ^
 ;            /DMyOutputBaseFilename=MP3Tagger-Setup-0.1.0-x64 installer\mp3-tagger.iss

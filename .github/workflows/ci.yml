@@ -10,6 +10,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -32,7 +35,9 @@ jobs:
             libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
             libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned so a new stable release cannot introduce lints that fail an
+      # unrelated tag build. Bump deliberately in both workflows.
+      - uses: dtolnay/rust-toolchain@1.98.1
         with:
           components: rustfmt, clippy
 
@@ -42,11 +47,12 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        # never_loop (src/services/metadata.rs) and large_enum_variant
-        # (src/ui/state.rs) are pre-existing findings. Remove these two allows
-        # once they are fixed to turn clippy back into a hard gate.
+        # Warnings are errors, so this is a hard gate. The two allowed lints are
+        # pre-existing findings (src/services/metadata.rs, src/ui/state.rs);
+        # remove the allows once they are fixed.
         run: |
           cargo clippy --workspace --all-targets -- \
+            -D warnings \
             -A clippy::never_loop -A clippy::large_enum_variant
 
       - name: Tests

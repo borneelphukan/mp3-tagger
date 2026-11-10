@@ -1,4 +1,4 @@
-name: Build
+name: Release
 
 # Produces every distributable for MP3 Tagger:
 #   Linux  : Debian (x86_64, RISC-V 64), Flatpak (x86_64, ARM64),
@@ -23,7 +23,7 @@ on:
       - "packaging/**"
       - "assets/**"
       - "website/**"
-      - ".github/workflows/build.yml"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
   schedule:
     # Rebuild weekly so the apt repository stays available and picks up new
@@ -31,7 +31,7 @@ on:
     - cron: "37 5 * * 1"
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -82,7 +82,7 @@ jobs:
             libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
             libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.98.1
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -163,7 +163,7 @@ jobs:
             libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
             libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.98.1
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -260,7 +260,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.98.1
 
       - name: Install cross
         uses: taiki-e/install-action@v2
@@ -343,7 +343,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.98.1
         with:
           targets: ${{ matrix.target }}
 
@@ -469,7 +469,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.98.1
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
 
@@ -535,8 +535,15 @@ jobs:
 
   publish-pages:
     name: Publish apt repository
-    needs: [debian-x86_64, website]
-    if: github.event_name != 'pull_request'
+    needs: [ci, debian-x86_64, website]
+    # `ci` only runs for tags. On main/schedule it is skipped, which must not
+    # block Pages; on tags it must succeed. This keeps the apt repository from
+    # serving a tag whose tagged commit failed fmt/clippy/tests.
+    if: >-
+      !cancelled() && github.event_name != 'pull_request' &&
+      needs.debian-x86_64.result == 'success' &&
+      needs.website.result == 'success' &&
+      (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -564,7 +571,7 @@ jobs:
       - name: Prepare signing key material
         id: key
         env:
-          PRIVATE_KEY: ${{ secrets.APT_REPO_PRIVATE_KEY }}
+          PRIVATE_KEY: ${{ secrets['APT_REPO_PRIVATE_KEY'] }}
           PASSPHRASE: ${{ secrets.APT_REPO_PASSPHRASE }}
           KEY_ID: ${{ vars.APT_REPO_KEY_ID }}
         run: |
@@ -667,9 +674,52 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # The tag commit must pass fmt, clippy (-D warnings), tests and the release
+  # build before anything is published. These steps mirror the `check` job in
+  # .github/workflows/ci.yml; keep the two in sync when the checks change.
+  ci:
+    name: Quality gate (fmt, clippy, tests)
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libx11-dev libxcb1-dev libxcb-composite0-dev libxcb-cursor-dev \
+            libxcb-image0-dev libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-render0-dev libxcb-render-util0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: |
+          cargo clippy --workspace --all-targets -- \
+            -D warnings \
+            -A clippy::never_loop -A clippy::large_enum_variant
+
+      - name: Tests
+        run: cargo test --workspace --locked
+
+      - name: Release build
+        run: cargo build --release --locked
+
   release:
     name: Attach artifacts to release
     needs:
+      - ci
       - debian-x86_64
       - linux-packages
       - linux-riscv64
@@ -686,18 +736,74 @@ jobs:
           merge-multiple: true
           path: release
 
+      - name: Verify deliverables and generate SHA256 checksums
+        working-directory: release
+        run: |
+          set -euo pipefail
+          # Unknown or newly added files are still hashed and published, so this
+          # list never needs a manual count bump: a missing entry only means the
+          # deliverable is not asserted, not that the release fails.
+          mapfile -t files < <(find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\n' | sort)
+          [ "${#files[@]}" -gt 0 ] || { echo "no artifacts were downloaded" >&2; exit 1; }
+
+          expected=(
+            # Linux packages, per architecture
+            'mp3-tagger_*_amd64.deb'
+            'mp3-tagger_*_riscv64.deb'
+            'mp3-tagger-*-1.x86_64.rpm'
+            'mp3-tagger-*-1.aarch64.rpm'
+            'mp3-tagger-*-1.riscv64.rpm'
+            'mp3-tagger-*-x86_64.pkg.tar.*'
+            'mp3-tagger-*-aarch64.pkg.tar.*'
+            # Linux bundles
+            'MP3Tagger-*-linux-x86_64.tar.gz'
+            'MP3Tagger-*-linux-aarch64.tar.gz'
+            'MP3Tagger-*-linux-riscv64.tar.gz'
+            'MP3Tagger-*-x86_64.AppImage'
+            'MP3Tagger-*-aarch64.AppImage'
+            'MP3Tagger-*-x86_64.flatpak'
+            'MP3Tagger-*-aarch64.flatpak'
+            # Windows
+            'MP3Tagger-Setup-*-x64.exe'
+            'MP3Tagger-Setup-*-x86.exe'
+            'MP3Tagger-Setup-*-arm64.exe'
+            'MP3Tagger-*-windows-x64.zip'
+            'MP3Tagger-*-windows-x86.zip'
+            'MP3Tagger-*-windows-arm64.zip'
+            # macOS
+            'MP3Tagger-*-macos-universal.dmg'
+          )
+          missing=0
+          for pattern in "${expected[@]}"; do
+            compgen -G "$pattern" >/dev/null || {
+              echo "::error::missing deliverable: $pattern"
+              missing=1
+            }
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "downloaded files:" >&2
+            printf '  %s\n' "${files[@]}" >&2
+            exit 1
+          fi
+
+          sha256sum -- "${files[@]}" > SHA256SUMS
+          sha256sum --check --strict --quiet SHA256SUMS
+          {
+            echo "### Release artifacts"
+            echo "Verified ${#expected[@]} required deliverables in ${#files[@]} files."
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Attach artifacts to the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="${{ github.ref_name }}"
+          test -s release/SHA256SUMS
           files=(release/*)
-          if [ "${#files[@]}" -lt 21 ]; then
-            echo "expected at least 21 artifacts, found ${#files[@]}" >&2
-            printf '  %s\n' "${files[@]}" >&2
-            exit 1
-          fi
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "MP3 Tagger $tag" --generate-notes
           fi
