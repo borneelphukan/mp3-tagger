@@ -79,7 +79,7 @@ flatpak remote-add --if-not-exists --user flathub \
 
 flatpak-builder \
     --user \
-    --assume-yes \
+    --assumeyes \
     --disable-rofiles-fuse \
     --force-clean \
     --install-deps-from=flathub \
