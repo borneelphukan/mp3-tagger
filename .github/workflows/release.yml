@@ -152,12 +152,9 @@ jobs:
   linux-packages:
     name: Linux packages (${{ matrix.label }})
     needs: metadata
-    # Full packaging is only needed for tags, pull-request validation and
-    # manual runs. Ordinary pushes to main only need the Debian package used by
-    # the apt repository and the website, so skip these expensive jobs.
-    if: >-
-      github.event_name != 'schedule' &&
-      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v'))
+    # Run for every push, pull request and manual dispatch; only the weekly
+    # schedule skips the expensive packaging matrix.
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -279,9 +276,9 @@ jobs:
   linux-riscv64:
     name: Linux packages (RISC-V 64)
     needs: metadata
-    if: >-
-      github.event_name != 'schedule' &&
-      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v'))
+    # Run for every push, pull request and manual dispatch; only the weekly
+    # schedule skips the expensive packaging matrix.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -357,9 +354,9 @@ jobs:
   windows:
     name: Windows (${{ matrix.label }})
     needs: metadata
-    if: >-
-      github.event_name != 'schedule' &&
-      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v'))
+    # Run for every push, pull request and manual dispatch; only the weekly
+    # schedule skips the expensive packaging matrix.
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -498,9 +495,9 @@ jobs:
   macos-universal:
     name: Disk image (Universal)
     needs: metadata
-    if: >-
-      github.event_name != 'schedule' &&
-      (github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v'))
+    # Run for every push, pull request and manual dispatch; only the weekly
+    # schedule skips the expensive packaging matrix.
+    if: github.event_name != 'schedule'
     runs-on: macos-15
     timeout-minutes: 60
     env:
@@ -577,9 +574,9 @@ jobs:
   publish-pages:
     name: Publish apt repository
     needs: [ci, debian-x86_64, website]
-    # `ci` only runs for tags. On main/schedule it is skipped, which must not
-    # block Pages; on tags it must succeed. This keeps the apt repository from
-    # serving a tag whose tagged commit failed fmt/clippy/tests.
+    # `ci` is skipped only on the weekly schedule, so that case must not block
+    # Pages; every other run has to pass it. This keeps the apt repository from
+    # serving a commit that failed fmt/clippy/tests.
     if: >-
       !cancelled() && github.event_name != 'pull_request' &&
       needs.debian-x86_64.result == 'success' &&
@@ -720,7 +717,7 @@ jobs:
   # .github/workflows/ci.yml; keep the two in sync when the checks change.
   ci:
     name: Quality gate (fmt, clippy, tests)
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -767,7 +764,11 @@ jobs:
       - linux-riscv64
       - windows
       - macos-universal
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Runs whenever the packaging jobs produced artifacts: pushes, pull
+    # requests and manual runs. Only the weekly schedule skips it. Attaching to
+    # a GitHub Release still requires a v* tag; other runs publish the verified
+    # bundle as a workflow artifact instead.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Download every packaging artifact
@@ -838,7 +839,19 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload the verified bundle
+        # A release needs a tag; every other run keeps the identical, already
+        # checksummed bundle as a workflow artifact so the packaging result is
+        # still downloadable.
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: release/*
+          retention-days: 14
+
       - name: Attach artifacts to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

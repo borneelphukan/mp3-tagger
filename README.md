@@ -156,10 +156,12 @@ ISCC.exe /DMyAppVersion=0.1.0 /DMyVersionInfo=0.1.0.0 /DMyArch=x64 ^
     /DMyOutputBaseFilename=MP3Tagger-Setup-0.1.0-x64 installer\mp3-tagger.iss
 ```
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`, which first passes a
-quality gate (`fmt`, `clippy -D warnings`, tests) on the tagged commit, then
-builds every Linux, Windows and macOS artifact, attaches them plus a `SHA256SUMS`
-manifest to the release, and republishes the apt repository to GitHub Pages.
+Every push, pull request and manual run of `.github/workflows/release.yml` passes
+a quality gate (`fmt`, `clippy -D warnings`, tests), builds every Linux, Windows
+and macOS artifact, verifies the full deliverable set and publishes the bundle
+with a `SHA256SUMS` manifest as a workflow artifact. Pushing a `v*` tag does the
+same and additionally attaches every file to a GitHub Release. The apt
+repository is republished to GitHub Pages on non-pull-request runs.
 
 ## Website
 
