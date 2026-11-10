@@ -141,10 +141,13 @@ jobs:
       - name: Compile NSIS installer
         shell: pwsh
         run: |
+          # PowerShell can split an unquoted native-command argument at a dot,
+          # so -DAPP_VERSION=0.1.0 would reach makensis as -DAPP_VERSION=0 and
+          # a stray ".1.0" script file. Quote every define to keep it intact.
           makensis `
-            -DAPP_VERSION=${{ steps.meta.outputs.version }} `
-            -DAPP_VERSION_NUM=${{ steps.meta.outputs.numeric }} `
-            -DOUTPUT_NAME=${{ steps.meta.outputs.setup }} `
+            "-DAPP_VERSION=${{ steps.meta.outputs.version }}" `
+            "-DAPP_VERSION_NUM=${{ steps.meta.outputs.numeric }}" `
+            "-DOUTPUT_NAME=${{ steps.meta.outputs.setup }}" `
             installer/mp3-tagger.nsi
 
       - name: Create portable zip
