@@ -1,14 +1,14 @@
 # Maintainer: borneelphukan <borneelphukan@users.noreply.github.com>
 #
-# Packages a prebuilt mp3-tagger binary. PKGVER, BINARY and ROOT are supplied by
+# Packages a prebuilt xur-porisoy binary. PKGVER, BINARY and ROOT are supplied by
 # packaging/arch/build-arch-pkg.sh, which runs makepkg inside an Arch container.
 
-pkgname=mp3-tagger
+pkgname=xur-porisoy
 pkgver=${PKGVER:?PKGVER is required}
 pkgrel=1
 pkgdesc="MP3 metadata editor with LLM-powered metadata fetching"
 arch=('x86_64' 'aarch64')
-url="https://github.com/borneelphukan/mp3-tagger"
+url="https://github.com/borneelphukan/xur-porisoy"
 license=('MIT')
 depends=(
     'glibc'
@@ -28,12 +28,12 @@ source=()
 sha256sums=()
 
 package() {
-    install -Dm755 "${BINARY:?BINARY is required}" "$pkgdir/usr/bin/mp3-tagger"
-    install -Dm644 "$ROOT/packaging/debian/mp3-tagger.desktop" \
-        "$pkgdir/usr/share/applications/mp3-tagger.desktop"
-    install -Dm644 "$ROOT/packaging/debian/mp3-tagger.metainfo.xml" \
-        "$pkgdir/usr/share/metainfo/mp3-tagger.metainfo.xml"
+    install -Dm755 "${BINARY:?BINARY is required}" "$pkgdir/usr/bin/xur-porisoy"
+    install -Dm644 "$ROOT/packaging/debian/xur-porisoy.desktop" \
+        "$pkgdir/usr/share/applications/xur-porisoy.desktop"
+    install -Dm644 "$ROOT/packaging/debian/xur-porisoy.metainfo.xml" \
+        "$pkgdir/usr/share/metainfo/xur-porisoy.metainfo.xml"
     install -Dm644 "$ROOT/assets/icon.png" \
-        "$pkgdir/usr/share/icons/hicolor/256x256/apps/mp3-tagger.png"
-    install -Dm644 "$ROOT/README.md" "$pkgdir/usr/share/doc/mp3-tagger/README.md"
+        "$pkgdir/usr/share/icons/hicolor/256x256/apps/xur-porisoy.png"
+    install -Dm644 "$ROOT/README.md" "$pkgdir/usr/share/doc/xur-porisoy/README.md"
 }

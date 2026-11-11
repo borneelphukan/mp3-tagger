@@ -1,12 +1,12 @@
 [package]
-name = "mp3-tagger"
+name = "xur-porisoy"
 version = "0.0.1"
 edition = "2021"
 description = "MP3 Metadata Editor with LLM-powered metadata fetching"
 authors = ["borneelphukan <borneelphukan@users.noreply.github.com>"]
 license = "MIT"
-repository = "https://github.com/borneelphukan/mp3-tagger"
-homepage = "https://github.com/borneelphukan/mp3-tagger"
+repository = "https://github.com/borneelphukan/xur-porisoy"
+homepage = "https://github.com/borneelphukan/xur-porisoy"
 categories = ["multimedia::audio", "gui"]
 keywords = ["mp3", "tagger", "metadata", "id3", "audio"]
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Refresh caches after removal. User data in ~/.config/mp3-tagger is never touched.
+# Refresh caches after removal. User data in ~/.config/xur-porisoy is never touched.
 set -e
 
 if [ -x /usr/bin/update-desktop-database ]; then

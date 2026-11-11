@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Build an AppImage for a Linux build of mp3-tagger.
+# Build an AppImage for a Linux build of xur-porisoy.
 #
 # Environment:
 #   VERSION        package version (required)
 #   ARCH           x86_64 or aarch64 (required)
-#   BINARY         path to the release binary (default: target/release/mp3-tagger)
+#   BINARY         path to the release binary (default: target/release/xur-porisoy)
 #   OUT_DIR        output directory (default: dist)
 #   APPIMAGETOOL   path to a pre-downloaded appimagetool (optional)
 #
@@ -18,7 +18,7 @@ ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
 VERSION="${VERSION:?VERSION is required}"
 ARCH="${ARCH:?ARCH is required}"
-BINARY="${BINARY:-$ROOT/target/release/mp3-tagger}"
+BINARY="${BINARY:-$ROOT/target/release/xur-porisoy}"
 OUT_DIR="${OUT_DIR:-$ROOT/dist}"
 
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -40,18 +40,18 @@ install -d -m 0755 \
     "$APPDIR/usr/share/applications" \
     "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
-install -m 0755 "$BINARY" "$APPDIR/usr/bin/mp3-tagger"
-install -m 0644 "$ROOT/packaging/debian/mp3-tagger.desktop" "$APPDIR/mp3-tagger.desktop"
-install -m 0644 "$ROOT/assets/icon.png" "$APPDIR/mp3-tagger.png"
-install -m 0644 "$ROOT/packaging/debian/mp3-tagger.desktop" \
-    "$APPDIR/usr/share/applications/mp3-tagger.desktop"
+install -m 0755 "$BINARY" "$APPDIR/usr/bin/xur-porisoy"
+install -m 0644 "$ROOT/packaging/debian/xur-porisoy.desktop" "$APPDIR/xur-porisoy.desktop"
+install -m 0644 "$ROOT/assets/icon.png" "$APPDIR/xur-porisoy.png"
+install -m 0644 "$ROOT/packaging/debian/xur-porisoy.desktop" \
+    "$APPDIR/usr/share/applications/xur-porisoy.desktop"
 install -m 0644 "$ROOT/assets/icon.png" \
-    "$APPDIR/usr/share/icons/hicolor/256x256/apps/mp3-tagger.png"
+    "$APPDIR/usr/share/icons/hicolor/256x256/apps/xur-porisoy.png"
 
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
-exec "$HERE/usr/bin/mp3-tagger" "$@"
+exec "$HERE/usr/bin/xur-porisoy" "$@"
 EOF
 chmod 0755 "$APPDIR/AppRun"
 
@@ -65,7 +65,7 @@ if [ -z "$TOOL" ]; then
 fi
 
 mkdir -p "$OUT_DIR"
-OUTPUT="$OUT_DIR/MP3Tagger-${VERSION}-${ARCH}.AppImage"
+OUTPUT="$OUT_DIR/XurPorisoy-${VERSION}-${ARCH}.AppImage"
 
 ARCH="$ARCH" APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" --no-appstream "$APPDIR" "$OUTPUT"
 

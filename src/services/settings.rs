@@ -3,7 +3,7 @@ use directories::ProjectDirs;
 use std::fs;
 use std::path::PathBuf;
 
-const APP_NAME: &str = "mp3-tagger";
+const APP_NAME: &str = "xur-porisoy";
 const SETTINGS_FILE: &str = "settings.json";
 
 pub struct SettingsService {

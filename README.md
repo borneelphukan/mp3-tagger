@@ -1,60 +1,60 @@
-# MP3 Tagger
+# XurPorisoy
 
 A native Rust desktop application for editing MP3 metadata with LLM-powered metadata fetching.
 
 ## Installation
 
-Prebuilt packages are published from the [Releases page](https://github.com/borneelphukan/mp3-tagger/releases).
+Prebuilt packages are published from the [Releases page](https://github.com/borneelphukan/xur-porisoy/releases).
 
 ### Ubuntu / Debian
 
 ```bash
-curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash
+curl -fsSL https://borneelphukan.github.io/xur-porisoy/install.sh | sudo bash
 ```
 
-That script adds the signed apt repository, installs `mp3-tagger`, and can be run with flags:
+That script adds the signed apt repository, installs `xur-porisoy`, and can be run with flags:
 
 ```bash
-curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash -- --print     # show what it will do
-curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash -- --yes       # no prompts
-curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash -- --remove    # uninstall and remove the repository
+curl -fsSL https://borneelphukan.github.io/xur-porisoy/install.sh | sudo bash -- --print     # show what it will do
+curl -fsSL https://borneelphukan.github.io/xur-porisoy/install.sh | sudo bash -- --yes       # no prompts
+curl -fsSL https://borneelphukan.github.io/xur-porisoy/install.sh | sudo bash -- --remove    # uninstall and remove the repository
 ```
 
 Afterwards `apt` knows about the package, so later upgrades are just:
 
 ```bash
-sudo apt update && sudo apt install --upgrade mp3-tagger
+sudo apt update && sudo apt install --upgrade xur-porisoy
 ```
 
 To do it by hand instead:
 
 ```bash
 sudo mkdir -p /usr/share/keyrings
-curl -fsSL https://borneelphukan.github.io/mp3-tagger/mp3-tagger-archive-keyring.gpg \
-  | sudo tee /usr/share/keyrings/mp3-tagger.gpg >/dev/null
+curl -fsSL https://borneelphukan.github.io/xur-porisoy/xur-porisoy-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/xur-porisoy.gpg >/dev/null
 
-sudo tee /etc/apt/sources.list.d/mp3-tagger.sources >/dev/null <<'EOF'
+sudo tee /etc/apt/sources.list.d/xur-porisoy.sources >/dev/null <<'EOF'
 Types: deb
-URIs: https://borneelphukan.github.io/mp3-tagger/apt/
+URIs: https://borneelphukan.github.io/xur-porisoy/apt/
 Suites: stable
 Components: main
 Architectures: amd64
-Signed-By: /usr/share/keyrings/mp3-tagger.gpg
+Signed-By: /usr/share/keyrings/xur-porisoy.gpg
 EOF
 
 sudo apt update
-sudo apt install mp3-tagger
+sudo apt install xur-porisoy
 ```
 
 To drop the repository again, delete those two files.
 
 ### Windows
 
-Download `MP3Tagger-Setup-<version>.exe` from the releases page and run it. The installer offers
+Download `XurPorisoy-Setup-<version>.exe` from the releases page and run it. The installer offers
 an optional Start Menu entry, a desktop shortcut, and adding the app to `PATH`; the application
-itself installs to `C:\Program Files\MP3 Tagger`.
+itself installs to `C:\Program Files\XurPorisoy`.
 
-A portable build is also attached to each release as `MP3Tagger-<version>-windows-x64.zip`.
+A portable build is also attached to each release as `XurPorisoy-<version>-windows-x64.zip`.
 
 ## Features
 
@@ -125,12 +125,12 @@ cargo run
 ```bash
 # Regenerate assets/icon.png and assets/icon.ico
 
-# Build dist/mp3-tagger_<version>_amd64.deb
+# Build dist/xur-porisoy_<version>_amd64.deb
 packaging/debian/build-deb.sh
 
 # Build a static apt repository into dist/../pages from the .deb files in dist/
 packaging/apt/build-repo.py --debs dist --out pages --suite stable --component main \
-    --origin mp3-tagger --label "MP3 Tagger"
+    --origin xur-porisoy --label "XurPorisoy"
 
 # Build a portable tarball (VERSION and ARCH are required)
 VERSION=0.1.0 ARCH=x86_64 packaging/linux/build-tarball.sh
@@ -152,8 +152,8 @@ VERSION=0.1.0 packaging/macos/build-dmg.sh
 
 # Build the Windows installer (needs Inno Setup and a release build)
 ISCC.exe /DMyAppVersion=0.1.0 /DMyVersionInfo=0.1.0.0 /DMyArch=x64 ^
-    /DMySourceExe=target\x86_64-pc-windows-msvc\release\mp3-tagger.exe ^
-    /DMyOutputBaseFilename=MP3Tagger-Setup-0.1.0-x64 installer\mp3-tagger.iss
+    /DMySourceExe=target\x86_64-pc-windows-msvc\release\xur-porisoy.exe ^
+    /DMyOutputBaseFilename=XurPorisoy-Setup-0.1.0-x64 installer\xur-porisoy.iss
 ```
 
 Every push, pull request and manual run of `.github/workflows/release.yml` passes
@@ -177,8 +177,8 @@ the release workflow. Pages hosts only the apt repository and `install.sh`.
 ## Configuration
 
 On first run, the app creates a config directory:
-- Linux: `~/.config/mp3-tagger/settings.json`
-- Windows: `%APPDATA%\mp3-tagger\settings.json`
+- Linux: `~/.config/xur-porisoy/settings.json`
+- Windows: `%APPDATA%\xur-porisoy\settings.json`
 
 ### LLM Setup
 

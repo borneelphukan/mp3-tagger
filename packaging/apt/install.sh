@@ -1,8 +1,8 @@
 #!/bin/sh
 #
-# Add the MP3 Tagger apt repository and install the app.
+# Add the XurPorisoy apt repository and install the app.
 #
-#   curl -fsSL https://borneelphukan.github.io/mp3-tagger/install.sh | sudo bash
+#   curl -fsSL https://borneelphukan.github.io/xur-porisoy/install.sh | sudo bash
 #
 # Options:
 #   --print, -n   print the commands instead of running them
@@ -11,21 +11,21 @@
 #   --help, -h    show this help
 #
 # Environment:
-#   MP3_TAGGER_REPO_URL   override the repository base URL
+#   XUR_PORISOY_REPO_URL   override the repository base URL
 #
 # This script is meant to be piped in through sudo, so it never consumes stdin,
 # and it re-executes itself with sudo when started as a normal user.
 
 set -eu
 
-BASE_URL="${MP3_TAGGER_REPO_URL:-https://borneelphukan.github.io/mp3-tagger}"
+BASE_URL="${XUR_PORISOY_REPO_URL:-https://borneelphukan.github.io/xur-porisoy}"
 SUITE="stable"
 COMPONENT="main"
 ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"
-KEYRING="/usr/share/keyrings/mp3-tagger.gpg"
-SOURCES="/etc/apt/sources.list.d/mp3-tagger.sources"
-KEY_URL="$BASE_URL/mp3-tagger-archive-keyring.gpg"
-PACKAGE="mp3-tagger"
+KEYRING="/usr/share/keyrings/xur-porisoy.gpg"
+SOURCES="/etc/apt/sources.list.d/xur-porisoy.sources"
+KEY_URL="$BASE_URL/xur-porisoy-archive-keyring.gpg"
+PACKAGE="xur-porisoy"
 ASSUME_YES=""
 MODE="install"
 DRY_RUN=0
@@ -147,5 +147,5 @@ run apt-get update
 note "installing $PACKAGE"
 run apt-get install $ASSUME_YES "$PACKAGE"
 
-[ "$DRY_RUN" -eq 0 ] && say "MP3 Tagger is installed. Start it with: $PACKAGE"
+[ "$DRY_RUN" -eq 0 ] && say "XurPorisoy is installed. Start it with: $PACKAGE"
 exit 0

@@ -8,7 +8,7 @@ use crate::ui::state::{AppMessage, AppState, View};
 use eframe::egui;
 use std::sync::mpsc::{self, Receiver};
 
-pub struct Mp3TaggerApp {
+pub struct XurPorisoyApp {
     state: AppState,
     message_rx: Receiver<AppMessage>,
     show_ai_settings: bool,
@@ -18,7 +18,7 @@ pub struct Mp3TaggerApp {
     applied_theme: ThemePreference,
 }
 
-impl Mp3TaggerApp {
+impl XurPorisoyApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let (message_tx, message_rx) = mpsc::channel();
         let state = AppState::new(message_tx).expect("Failed to initialize app state");
@@ -56,7 +56,7 @@ impl Mp3TaggerApp {
 
     fn show_about_popup(ctx: &egui::Context, open: &mut bool) {
         let mut close_clicked = false;
-        egui::Window::new("About MP3 Tagger")
+        egui::Window::new("About XurPorisoy")
             .open(open)
             .collapsible(false)
             .resizable(true)
@@ -76,13 +76,13 @@ impl Mp3TaggerApp {
                             );
                         });
                     ui.add_space(14.0);
-                    ui.heading(egui::RichText::new("MP3 Tagger").size(34.0));
+                    ui.heading(egui::RichText::new("XurPorisoy").size(34.0));
                 });
 
                 ui.add_space(20.0);
                 ui.label(
                     egui::RichText::new(
-                        "MP3 Tagger is a modern, easy-to-use application for editing audio metadata and cover artwork.",
+                        "XurPorisoy is a modern, easy-to-use application for editing audio metadata and cover artwork.",
                     )
                     .size(18.0),
                 );
@@ -188,7 +188,7 @@ impl Mp3TaggerApp {
     }
 }
 
-impl eframe::App for Mp3TaggerApp {
+impl eframe::App for XurPorisoyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.state.settings.theme != self.applied_theme {
             Self::apply_theme(ctx, self.state.settings.theme);

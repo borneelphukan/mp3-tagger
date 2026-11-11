@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use crate::ui::Mp3TaggerApp;
+use crate::ui::XurPorisoyApp;
 use std::sync::Arc;
 
 mod models;
@@ -18,7 +18,7 @@ async fn main() -> Result<(), eframe::Error> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([1200.0, 800.0])
         .with_min_inner_size([800.0, 600.0])
-        .with_title("MP3 Tagger");
+        .with_title("XurPorisoy");
 
     if let Some(icon_data) = icon {
         viewport = viewport.with_icon(icon_data);
@@ -34,9 +34,9 @@ async fn main() -> Result<(), eframe::Error> {
 
     // Run the app
     eframe::run_native(
-        "MP3 Tagger",
+        "XurPorisoy",
         options,
-        Box::new(|cc| Ok(Box::new(Mp3TaggerApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(XurPorisoyApp::new(cc)))),
     )
 }
 

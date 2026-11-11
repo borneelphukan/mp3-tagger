@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Build a universal macOS disk image for mp3-tagger.
+# Build a universal macOS disk image for xur-porisoy.
 #
 # BINARY is expected to be a universal (x86_64 + arm64) executable, normally
 # produced with `lipo` from the two per-target release binaries.
 #
 # Environment:
 #   VERSION   package version (required)
-#   BINARY    path to the universal binary (default: target/release/mp3-tagger)
+#   BINARY    path to the universal binary (default: target/release/xur-porisoy)
 #   OUT_DIR   output directory (default: dist)
 #
 # Usage: VERSION=0.1.0 packaging/macos/build-dmg.sh
@@ -18,11 +18,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
 VERSION="${VERSION:?VERSION is required}"
-BINARY="${BINARY:-$ROOT/target/release/mp3-tagger}"
+BINARY="${BINARY:-$ROOT/target/release/xur-porisoy}"
 OUT_DIR="${OUT_DIR:-$ROOT/dist}"
 
-APP_NAME="MP3 Tagger"
-BUNDLE_ID="io.github.borneelphukan.mp3Tagger"
+APP_NAME="XurPorisoy"
+BUNDLE_ID="io.github.borneelphukan.XurPorisoy"
 
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -37,7 +37,7 @@ trap 'rm -rf "$STAGE"' EXIT
 
 APP_DIR="$STAGE/$APP_NAME.app"
 install -d -m 0755 "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-install -m 0755 "$BINARY" "$APP_DIR/Contents/MacOS/mp3-tagger"
+install -m 0755 "$BINARY" "$APP_DIR/Contents/MacOS/xur-porisoy"
 
 # Build a multi-resolution .icns from the PNG. Crop it to a square first so the
 # icons are not stretched.
@@ -68,7 +68,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
     <key>CFBundleExecutable</key>
-    <string>mp3-tagger</string>
+    <string>xur-porisoy</string>
     <key>CFBundleIconFile</key>
     <string>icon.icns</string>
     <key>CFBundlePackageType</key>
@@ -84,7 +84,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
 EOF
 
 mkdir -p "$OUT_DIR"
-OUTPUT="$OUT_DIR/MP3Tagger-${VERSION}-macos-universal.dmg"
+OUTPUT="$OUT_DIR/XurPorisoy-${VERSION}-macos-universal.dmg"
 hdiutil create \
     -volname "$APP_NAME" \
     -srcfolder "$APP_DIR" \

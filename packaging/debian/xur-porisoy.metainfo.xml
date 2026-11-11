@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.borneelphukan.mp3Tagger</id>
+  <id>io.github.borneelphukan.XurPorisoy</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
-  <name>MP3 Tagger</name>
+  <name>XurPorisoy</name>
   <summary>Edit audio metadata with LLM-powered lookup</summary>
   <description>
     <p>
-      MP3 Tagger is a native desktop application for editing metadata of MP3, FLAC,
+      XurPorisoy is a native desktop application for editing metadata of MP3, FLAC,
       OGG, M4A, WAV, AIFF and APE files. It offers list and grid library views, a
       detail view covering more than 34 metadata fields, embedded album artwork
       handling and batch adding of files.
@@ -17,15 +17,15 @@
       so a title and artist are enough to fetch the remaining fields.
     </p>
   </description>
-  <launchable type="desktop-id">mp3-tagger.desktop</launchable>
+  <launchable type="desktop-id">xur-porisoy.desktop</launchable>
   <provides>
-    <binary>mp3-tagger</binary>
+    <binary>xur-porisoy</binary>
   </provides>
   <developer id="io.github.borneelphukan">
     <name>borneelphukan</name>
   </developer>
-  <url type="homepage">https://github.com/borneelphukan/mp3-tagger</url>
-  <url type="bugtracker">https://github.com/borneelphukan/mp3-tagger/issues</url>
+  <url type="homepage">https://github.com/borneelphukan/xur-porisoy</url>
+  <url type="bugtracker">https://github.com/borneelphukan/xur-porisoy/issues</url>
   <content_rating type="oars-1.1" />
   <supports>
     <control>pointing</control>

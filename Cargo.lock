@@ -1715,7 +1715,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mp3-tagger"
+name = "xur-porisoy"
 version = "0.0.1"
 dependencies = [
  "directories",

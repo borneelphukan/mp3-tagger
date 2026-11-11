@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build a binary RPM for a Linux build of mp3-tagger.
+# Build a binary RPM for a Linux build of xur-porisoy.
 #
 # The binary is packaged as-is, so this works for native and cross-compiled
 # targets as long as rpmbuild is available on the host.
@@ -8,7 +8,7 @@
 # Environment:
 #   VERSION    package version (required)
 #   RPM_ARCH   x86_64, aarch64 or riscv64 (required)
-#   BINARY     path to the release binary (default: target/release/mp3-tagger)
+#   BINARY     path to the release binary (default: target/release/xur-porisoy)
 #   OUT_DIR    output directory (default: dist)
 #
 # Usage: VERSION=0.1.0 RPM_ARCH=x86_64 packaging/rpm/build-rpm.sh
@@ -20,7 +20,7 @@ ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
 VERSION="${VERSION:?VERSION is required}"
 RPM_ARCH="${RPM_ARCH:?RPM_ARCH is required}"
-BINARY="${BINARY:-$ROOT/target/release/mp3-tagger}"
+BINARY="${BINARY:-$ROOT/target/release/xur-porisoy}"
 OUT_DIR="${OUT_DIR:-$ROOT/dist}"
 
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -34,20 +34,20 @@ trap 'rm -rf "$TOPDIR"' EXIT
 mkdir -p "$TOPDIR/BUILD" "$TOPDIR/BUILDROOT" "$TOPDIR/RPMS" \
     "$TOPDIR/SOURCES" "$TOPDIR/SPECS" "$TOPDIR/SRPMS"
 
-SPEC="$TOPDIR/SPECS/mp3-tagger.spec"
+SPEC="$TOPDIR/SPECS/xur-porisoy.spec"
 cat > "$SPEC" <<EOF
 %global debug_package %{nil}
 %global __strip /bin/true
 
-Name:           mp3-tagger
+Name:           xur-porisoy
 Version:        $VERSION
 Release:        1
 Summary:        MP3 metadata editor with LLM-powered metadata fetching
 License:        MIT
-URL:            https://github.com/borneelphukan/mp3-tagger
+URL:            https://github.com/borneelphukan/xur-porisoy
 
 %description
-MP3 Tagger is a native desktop application for editing metadata of MP3,
+XurPorisoy is a native desktop application for editing metadata of MP3,
 FLAC, OGG, M4A, WAV, AIFF and APE files. It offers list and grid library
 views, a detail view covering more than 34 metadata fields, embedded album
 artwork handling and batch adding of files. Metadata can be filled in
@@ -59,15 +59,15 @@ automatically through any OpenAI compatible API.
 
 %install
 set -e
-install -Dm0755 "$BINARY" %{buildroot}%{_bindir}/mp3-tagger
-install -Dm0644 "$ROOT/packaging/debian/mp3-tagger.desktop" \
-    %{buildroot}%{_datadir}/applications/mp3-tagger.desktop
-install -Dm0644 "$ROOT/packaging/debian/mp3-tagger.metainfo.xml" \
-    %{buildroot}%{_datadir}/metainfo/mp3-tagger.metainfo.xml
+install -Dm0755 "$BINARY" %{buildroot}%{_bindir}/xur-porisoy
+install -Dm0644 "$ROOT/packaging/debian/xur-porisoy.desktop" \
+    %{buildroot}%{_datadir}/applications/xur-porisoy.desktop
+install -Dm0644 "$ROOT/packaging/debian/xur-porisoy.metainfo.xml" \
+    %{buildroot}%{_datadir}/metainfo/xur-porisoy.metainfo.xml
 install -Dm0644 "$ROOT/assets/icon.png" \
-    %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/mp3-tagger.png
+    %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/xur-porisoy.png
 install -Dm0644 "$ROOT/README.md" \
-    %{buildroot}%{_datadir}/doc/mp3-tagger/README.md
+    %{buildroot}%{_datadir}/doc/xur-porisoy/README.md
 
 %post
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -86,11 +86,11 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 %files
-%{_bindir}/mp3-tagger
-%{_datadir}/applications/mp3-tagger.desktop
-%{_datadir}/metainfo/mp3-tagger.metainfo.xml
-%{_datadir}/icons/hicolor/256x256/apps/mp3-tagger.png
-%{_datadir}/doc/mp3-tagger/README.md
+%{_bindir}/xur-porisoy
+%{_datadir}/applications/xur-porisoy.desktop
+%{_datadir}/metainfo/xur-porisoy.metainfo.xml
+%{_datadir}/icons/hicolor/256x256/apps/xur-porisoy.png
+%{_datadir}/doc/xur-porisoy/README.md
 EOF
 
 rpmbuild -bb --target "$RPM_ARCH" --define "_topdir $TOPDIR" "$SPEC"
@@ -98,4 +98,4 @@ rpmbuild -bb --target "$RPM_ARCH" --define "_topdir $TOPDIR" "$SPEC"
 mkdir -p "$OUT_DIR"
 find "$TOPDIR/RPMS" -type f -name '*.rpm' -exec cp -f {} "$OUT_DIR/" \;
 
-printf 'built %s\n' "$OUT_DIR/mp3-tagger-${VERSION}-1.${RPM_ARCH}.rpm"
+printf 'built %s\n' "$OUT_DIR/xur-porisoy-${VERSION}-1.${RPM_ARCH}.rpm"

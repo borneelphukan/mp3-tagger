@@ -14,7 +14,7 @@ pub fn client() -> &'static Client {
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(60))
             .pool_idle_timeout(Duration::from_secs(90))
-            .user_agent(concat!("mp3-tagger/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("xur-porisoy/", env!("CARGO_PKG_VERSION")))
             .build()
             .unwrap_or_default()
     })

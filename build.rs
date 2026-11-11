@@ -9,10 +9,10 @@ fn main() {
     let mut resource = winresource::WindowsResource::new();
     resource
         .set_icon("assets/icon.ico")
-        .set("ProductName", "MP3 Tagger")
-        .set("FileDescription", "MP3 Tagger - audio metadata editor")
-        .set("CompanyName", "MP3 Tagger")
-        .set("InternalName", "mp3-tagger")
+        .set("ProductName", "XurPorisoy")
+        .set("FileDescription", "XurPorisoy - audio metadata editor")
+        .set("CompanyName", "XurPorisoy")
+        .set("InternalName", "xur-porisoy")
         .set("LegalCopyright", "MIT licensed")
         .compile()
         .expect("failed to embed the Windows icon and version resource");

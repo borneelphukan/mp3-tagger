@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build an Arch Linux package for a Linux build of mp3-tagger.
+# Build an Arch Linux package for a Linux build of xur-porisoy.
 #
 # makepkg only runs on Arch, so this script uses Docker: the official image for
 # x86_64 and an Arch Linux ARM image for aarch64. The binary itself is packaged
@@ -9,7 +9,7 @@
 # Environment:
 #   VERSION   package version (required)
 #   ARCH      x86_64 or aarch64 (required)
-#   BINARY    path to the release binary (default: target/release/mp3-tagger)
+#   BINARY    path to the release binary (default: target/release/xur-porisoy)
 #   OUT_DIR   output directory (default: dist)
 #
 # Usage: VERSION=0.1.0 ARCH=x86_64 packaging/arch/build-arch-pkg.sh
@@ -21,7 +21,7 @@ ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
 VERSION="${VERSION:?VERSION is required}"
 ARCH="${ARCH:?ARCH is required}"
-BINARY="${BINARY:-$ROOT/target/release/mp3-tagger}"
+BINARY="${BINARY:-$ROOT/target/release/xur-porisoy}"
 OUT_DIR="${OUT_DIR:-$ROOT/dist}"
 
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }

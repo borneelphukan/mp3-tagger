@@ -1,6 +1,6 @@
 name: Release
 
-# Produces every distributable for MP3 Tagger:
+# Produces every distributable for XurPorisoy:
 #   Linux  : Debian (x86_64, RISC-V 64), Flatpak (x86_64, ARM64),
 #            AppImage (x86_64, ARM64), RPM (x86_64, ARM64, RISC-V 64),
 #            Tarball (x86_64, ARM64, RISC-V 64), Arch (x86_64, ARM64)
@@ -121,11 +121,11 @@ jobs:
           control="$(mktemp -d)"
           dpkg-deb --extract "$deb" "$data"
           dpkg-deb --control "$deb" "$control"
-          desktop-file-validate "$data/usr/share/applications/mp3-tagger.desktop"
-          appstreamcli validate --no-net "$data/usr/share/metainfo/mp3-tagger.metainfo.xml"
-          test -x "$data/usr/bin/mp3-tagger"
-          test -s "$data/usr/share/icons/hicolor/256x256/apps/mp3-tagger.png"
-          test -f "$data/usr/share/doc/mp3-tagger/copyright"
+          desktop-file-validate "$data/usr/share/applications/xur-porisoy.desktop"
+          appstreamcli validate --no-net "$data/usr/share/metainfo/xur-porisoy.metainfo.xml"
+          test -x "$data/usr/bin/xur-porisoy"
+          test -s "$data/usr/share/icons/hicolor/256x256/apps/xur-porisoy.png"
+          test -f "$data/usr/share/doc/xur-porisoy/copyright"
           for script in postinst prerm postrm; do
             test -x "$control/$script"
             sh -n "$control/$script"
@@ -305,7 +305,7 @@ jobs:
         env:
           VERSION: ${{ needs.metadata.outputs.version }}
           ARCH: riscv64
-          BINARY: target/riscv64gc-unknown-linux-gnu/release/mp3-tagger
+          BINARY: target/riscv64gc-unknown-linux-gnu/release/xur-porisoy
           OUT_DIR: dist/tarball-riscv64
         run: packaging/linux/build-tarball.sh
 
@@ -319,7 +319,7 @@ jobs:
 
       - name: Build Debian package
         env:
-          BINARY: target/riscv64gc-unknown-linux-gnu/release/mp3-tagger
+          BINARY: target/riscv64gc-unknown-linux-gnu/release/xur-porisoy
           DEB_ARCH: riscv64
           OUT_DIR: dist/deb-riscv64
         run: packaging/debian/build-deb.sh
@@ -336,7 +336,7 @@ jobs:
         env:
           VERSION: ${{ needs.metadata.outputs.version }}
           RPM_ARCH: riscv64
-          BINARY: target/riscv64gc-unknown-linux-gnu/release/mp3-tagger
+          BINARY: target/riscv64gc-unknown-linux-gnu/release/xur-porisoy
           OUT_DIR: dist/rpm-riscv64
         run: packaging/rpm/build-rpm.sh
 
@@ -387,9 +387,9 @@ jobs:
       - name: Verify the resources were embedded
         shell: pwsh
         run: |
-          $exe = (Resolve-Path "target\${{ matrix.target }}\release\mp3-tagger.exe").Path
+          $exe = (Resolve-Path "target\${{ matrix.target }}\release\xur-porisoy.exe").Path
           $vi = (Get-Item $exe).VersionInfo
-          if ($vi.ProductName -ne "MP3 Tagger") {
+          if ($vi.ProductName -ne "XurPorisoy") {
             throw "ProductName was not embedded, found '$($vi.ProductName)'"
           }
           # winresource embeds Cargo's semantic version (for example 0.1.0).
@@ -443,8 +443,8 @@ jobs:
           $version = "${{ needs.metadata.outputs.version }}"
           $numeric = "${{ needs.metadata.outputs.numeric }}"
           $arch = "${{ matrix.arch }}"
-          $source = (Resolve-Path "target\${{ matrix.target }}\release\mp3-tagger.exe").Path
-          $base = "MP3Tagger-Setup-$version-$arch"
+          $source = (Resolve-Path "target\${{ matrix.target }}\release\xur-porisoy.exe").Path
+          $base = "XurPorisoy-Setup-$version-$arch"
           $iscc = "${{ steps.inno.outputs.iscc }}"
 
           # Quoting each define keeps PowerShell from splitting dotted values.
@@ -454,7 +454,7 @@ jobs:
             "/DMyArch=$arch"
             "/DMySourceExe=$source"
             "/DMyOutputBaseFilename=$base"
-            "installer\mp3-tagger.iss"
+            "installer\xur-porisoy.iss"
           )
           & $iscc @isccArgs
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
@@ -466,7 +466,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item $source $stage
           Copy-Item "README.md" $stage
-          $portable = "target\MP3Tagger-$version-windows-$arch.zip"
+          $portable = "target\XurPorisoy-$version-windows-$arch.zip"
           Compress-Archive -Path "$stage\*" -DestinationPath $portable -Force
 
           "setup=$setup" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -519,10 +519,10 @@ jobs:
       - name: Create universal binary
         run: |
           lipo -create \
-            -output target/release/mp3-tagger \
-            target/aarch64-apple-darwin/release/mp3-tagger \
-            target/x86_64-apple-darwin/release/mp3-tagger
-          lipo -info target/release/mp3-tagger
+            -output target/release/xur-porisoy \
+            target/aarch64-apple-darwin/release/xur-porisoy \
+            target/x86_64-apple-darwin/release/xur-porisoy
+          lipo -info target/release/xur-porisoy
 
       - name: Build disk image
         env:
@@ -600,7 +600,7 @@ jobs:
         run: |
           mkdir -p pages
           args=(--debs dist --out pages --suite stable --component main
-                --origin mp3-tagger --label "MP3 Tagger")
+                --origin xur-porisoy --label "XurPorisoy")
           if [ -n "$KEY_ID" ]; then
             args+=(--gpg-key-id "$KEY_ID" --gpg-key-file "$KEY_FILE"
                    --gpg-passphrase-file "$PASSPHRASE_FILE")
@@ -745,30 +745,30 @@ jobs:
 
           expected=(
             # Linux packages, per architecture
-            'mp3-tagger_*_amd64.deb'
-            'mp3-tagger_*_riscv64.deb'
-            'mp3-tagger-*-1.x86_64.rpm'
-            'mp3-tagger-*-1.aarch64.rpm'
-            'mp3-tagger-*-1.riscv64.rpm'
-            'mp3-tagger-*-x86_64.pkg.tar.*'
-            'mp3-tagger-*-aarch64.pkg.tar.*'
+            'xur-porisoy_*_amd64.deb'
+            'xur-porisoy_*_riscv64.deb'
+            'xur-porisoy-*-1.x86_64.rpm'
+            'xur-porisoy-*-1.aarch64.rpm'
+            'xur-porisoy-*-1.riscv64.rpm'
+            'xur-porisoy-*-x86_64.pkg.tar.*'
+            'xur-porisoy-*-aarch64.pkg.tar.*'
             # Linux bundles
-            'MP3Tagger-*-linux-x86_64.tar.gz'
-            'MP3Tagger-*-linux-aarch64.tar.gz'
-            'MP3Tagger-*-linux-riscv64.tar.gz'
-            'MP3Tagger-*-x86_64.AppImage'
-            'MP3Tagger-*-aarch64.AppImage'
-            'MP3Tagger-*-x86_64.flatpak'
-            'MP3Tagger-*-aarch64.flatpak'
+            'XurPorisoy-*-linux-x86_64.tar.gz'
+            'XurPorisoy-*-linux-aarch64.tar.gz'
+            'XurPorisoy-*-linux-riscv64.tar.gz'
+            'XurPorisoy-*-x86_64.AppImage'
+            'XurPorisoy-*-aarch64.AppImage'
+            'XurPorisoy-*-x86_64.flatpak'
+            'XurPorisoy-*-aarch64.flatpak'
             # Windows
-            'MP3Tagger-Setup-*-x64.exe'
-            'MP3Tagger-Setup-*-x86.exe'
-            'MP3Tagger-Setup-*-arm64.exe'
-            'MP3Tagger-*-windows-x64.zip'
-            'MP3Tagger-*-windows-x86.zip'
-            'MP3Tagger-*-windows-arm64.zip'
+            'XurPorisoy-Setup-*-x64.exe'
+            'XurPorisoy-Setup-*-x86.exe'
+            'XurPorisoy-Setup-*-arm64.exe'
+            'XurPorisoy-*-windows-x64.zip'
+            'XurPorisoy-*-windows-x86.zip'
+            'XurPorisoy-*-windows-arm64.zip'
             # macOS
-            'MP3Tagger-*-macos-universal.dmg'
+            'XurPorisoy-*-macos-universal.dmg'
           )
           missing=0
           for pattern in "${expected[@]}"; do
@@ -817,7 +817,7 @@ jobs:
           test -s release/SHA256SUMS
           files=(release/*)
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "MP3 Tagger $tag" --generate-notes
+            gh release create "$tag" --title "XurPorisoy $tag" --generate-notes
           fi
           gh release upload "$tag" "${files[@]}" --clobber
           printf 'attached %d artifacts to release %s\n' "${#files[@]}" "$tag"

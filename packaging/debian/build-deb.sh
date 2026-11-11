@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# Build a distributable .deb for mp3-tagger.
+# Build a distributable .deb for xur-porisoy.
 #
 # Everything that dpkg needs is derived from Cargo metadata and from the release
 # binary itself, so bumping `version` in Cargo.toml is all that is required.
 #
 # Environment overrides:
-#   BINARY           path to the release binary (default: target/release/mp3-tagger)
+#   BINARY           path to the release binary (default: target/release/xur-porisoy)
 #   OUT_DIR          output directory for the .deb (default: dist)
 #   DEB_MAINTAINER   value for the Maintainer control field
 #   DEB_ARCH         Debian architecture (default: dpkg-architecture / dpkg)
@@ -20,11 +20,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 cd "$ROOT"
 
-BINARY="${BINARY:-$ROOT/target/release/mp3-tagger}"
+BINARY="${BINARY:-$ROOT/target/release/xur-porisoy}"
 OUT_DIR="${OUT_DIR:-$ROOT/dist}"
 DEB_ARCH="${DEB_ARCH:-$(dpkg-architecture -qDEB_HOST_ARCH 2>/dev/null || dpkg --print-architecture)}"
 DEB_GLIBC_MIN="${DEB_GLIBC_MIN:-2.17}"
-PKG="mp3-tagger"
+PKG="xur-porisoy"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -53,7 +53,7 @@ try:
 except Exception:
     print("")
     raise SystemExit(0)
-pkg = next((p for p in packages if p["name"] == "mp3-tagger"), None)
+pkg = next((p for p in packages if p["name"] == "xur-porisoy"), None)
 if pkg is None:
     print("")
     raise SystemExit(0)
@@ -76,9 +76,9 @@ SUMMARY="$(read_meta description)"
 [ -n "$SUMMARY" ] || SUMMARY="MP3 metadata editor with LLM-powered metadata fetching"
 HOMEPAGE="$(read_meta homepage)"
 [ -n "$HOMEPAGE" ] || HOMEPAGE="$(read_meta repository)"
-[ -n "$HOMEPAGE" ] || HOMEPAGE="https://github.com/borneelphukan/mp3-tagger"
+[ -n "$HOMEPAGE" ] || HOMEPAGE="https://github.com/borneelphukan/xur-porisoy"
 MAINTAINER="${DEB_MAINTAINER:-$(read_meta authors)}"
-[ -n "$MAINTAINER" ] || MAINTAINER="mp3-tagger maintainers <mp3-tagger@users.noreply.github.com>"
+[ -n "$MAINTAINER" ] || MAINTAINER="xur-porisoy maintainers <xur-porisoy@users.noreply.github.com>"
 
 # The long description is the multi-paragraph form of the summary; Debian wants the
 # first line in Description: and the rest indented underneath.

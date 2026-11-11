@@ -31,8 +31,8 @@ import subprocess
 import sys
 import time
 
-REPO_BASE = "https://borneelphukan.github.io/mp3-tagger"
-KEYRING_NAME = "mp3-tagger-archive-keyring.gpg"
+REPO_BASE = "https://borneelphukan.github.io/xur-porisoy"
+KEYRING_NAME = "xur-porisoy-archive-keyring.gpg"
 
 FIELDS = (
     "Package",
@@ -170,7 +170,7 @@ def build_index_html(out_dir, suite, component, archs, signed):
     trusted = "" if signed else "&nbsp;&nbsp;&nbsp;<strong>(unsigned repository)</strong>"
     keyring_line = (
         f"curl -fsSL {REPO_BASE}/{KEYRING_NAME} | sudo tee "
-        "/usr/share/keyrings/mp3-tagger.gpg >/dev/null"
+        "/usr/share/keyrings/xur-porisoy.gpg >/dev/null"
         if signed
         else "# no signing key: the repository is used with [trusted=yes]"
     )
@@ -179,14 +179,14 @@ URIs: {REPO_BASE}/apt/
 Suites: {suite}
 Components: {component}
 Architectures: {' '.join(archs)}
-Signed-By: /usr/share/keyrings/mp3-tagger.gpg"""
+Signed-By: /usr/share/keyrings/xur-porisoy.gpg"""
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MP3 Tagger &mdash; apt repository</title>
+<title>XurPorisoy &mdash; apt repository</title>
 <style>
   body {{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
          max-width: 46rem; margin: 3rem auto; padding: 0 1.25rem;
@@ -200,7 +200,7 @@ Signed-By: /usr/share/keyrings/mp3-tagger.gpg"""
 </style>
 </head>
 <body>
-<h1>MP3 Tagger apt repository{trusted}</h1>
+<h1>XurPorisoy apt repository{trusted}</h1>
 <p>Suite <code>{suite}</code>, component <code>{component}</code>,
 architectures <code>{' '.join(archs)}</code>.</p>
 
@@ -209,14 +209,14 @@ architectures <code>{' '.join(archs)}</code>.</p>
 
 <p>Or manually:</p>
 <pre><code>{keyring_line}
-sudo tee /etc/apt/sources.list.d/mp3-tagger.sources &gt;/dev/null &lt;&lt;'EOF'
+sudo tee /etc/apt/sources.list.d/xur-porisoy.sources &gt;/dev/null &lt;&lt;'EOF'
 {sources}
 EOF
 sudo apt update
-sudo apt install mp3-tagger</code></pre>
+sudo apt install xur-porisoy</code></pre>
 
 <p class="muted">Direct download:
-<a href="{REPO_BASE}/apt/pool/main/m/mp3-tagger/">apt/pool/main/m/mp3-tagger/</a></p>
+<a href="{REPO_BASE}/apt/pool/main/m/xur-porisoy/">apt/pool/main/m/xur-porisoy/</a></p>
 </body>
 </html>
 """
@@ -231,11 +231,11 @@ def main():
     parser.add_argument("--codename", default=None, help="defaults to --suite")
     parser.add_argument("--component", default="main")
     parser.add_argument(
-        "--origin", default="mp3-tagger", help="repository origin label"
+        "--origin", default="xur-porisoy", help="repository origin label"
     )
-    parser.add_argument("--label", default="MP3 Tagger")
+    parser.add_argument("--label", default="XurPorisoy")
     parser.add_argument(
-        "--description", default="MP3 Tagger packages for Debian and Ubuntu"
+        "--description", default="XurPorisoy packages for Debian and Ubuntu"
     )
     parser.add_argument("--gpg-key-id", default=None)
     parser.add_argument("--gpg-key-file", default=None)
