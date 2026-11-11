@@ -1,6 +1,6 @@
 [package]
 name = "mp3-tagger"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 description = "MP3 Metadata Editor with LLM-powered metadata fetching"
 authors = ["borneelphukan <borneelphukan@users.noreply.github.com>"]
