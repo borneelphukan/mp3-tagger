@@ -39,15 +39,15 @@ env:
 jobs:
   check:
     name: fmt, clippy and tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
             pkg-config \
             libx11-dev libxcb1-dev libxcb-composite0-dev libxcb-cursor-dev \
             libxcb-image0-dev libxcb-icccm4-dev libxcb-keysyms1-dev \
@@ -84,20 +84,20 @@ jobs:
 
   linux-assets:
     name: packaging assets are consistent
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
       - name: Validate desktop entry
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends desktop-file-utils
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends desktop-file-utils
           desktop-file-validate packaging/debian/xur-porisoy.desktop
 
       - name: Validate AppStream metadata
         run: |
-          sudo apt-get install -y --no-install-recommends appstream
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends appstream
           appstreamcli validate --no-net packaging/debian/xur-porisoy.metainfo.xml
 
       - name: Shell script syntax
