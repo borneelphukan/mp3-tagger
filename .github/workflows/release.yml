@@ -6,7 +6,7 @@ name: Release
 #            Tarball (x86_64, ARM64, RISC-V 64), Arch (x86_64, ARM64)
 #   Windows: Installer/Portable (64-bit, 32-bit, ARM64)
 #   macOS  : Disk image (Universal)
-# plus the apt repository and landing page on GitHub Pages.
+# plus the apt repository on GitHub Pages.
 
 on:
   push:
@@ -23,7 +23,6 @@ on:
       - "installer/**"
       - "packaging/**"
       - "assets/**"
-      - "website/**"
       - ".github/workflows/release.yml"
   pull_request:
     paths:
@@ -35,8 +34,6 @@ on:
       - "installer/**"
       - "packaging/**"
       - "assets/**"
-      # Website-only changes are validated by the lightweight Website workflow
-      # instead of triggering the full packaging matrix.
       - ".github/workflows/release.yml"
   workflow_dispatch:
   schedule:
@@ -541,46 +538,15 @@ jobs:
           retention-days: 30
           path: dist/macos-universal/*.dmg
 
-  website:
-    name: Build website
-    needs: metadata
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: website/package-lock.json
-
-      - name: Build the landing page
-        working-directory: website
-        env:
-          VITE_APP_VERSION: ${{ needs.metadata.outputs.version }}
-        run: |
-          npm ci --prefer-offline --no-audit --no-fund
-          npm run build
-
-      - name: Upload the site artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: website-dist
-          if-no-files-found: error
-          retention-days: 7
-          path: website/dist
-
   publish-pages:
     name: Publish apt repository
-    needs: [ci, debian-x86_64, website]
+    needs: [ci, debian-x86_64]
     # `ci` is skipped only on the weekly schedule, so that case must not block
     # Pages; every other run has to pass it. This keeps the apt repository from
     # serving a commit that failed fmt/clippy/tests.
     if: >-
       !cancelled() && github.event_name != 'pull_request' &&
       needs.debian-x86_64.result == 'success' &&
-      needs.website.result == 'success' &&
       (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
@@ -599,12 +565,6 @@ jobs:
         with:
           name: Debian package (x86_64)
           path: dist
-
-      - name: Download the website artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: website-dist
-          path: site
 
       - name: Prepare signing key material
         id: key
@@ -682,12 +642,8 @@ jobs:
           # with "Get Pages site failed ... Not Found".
           enablement: true
 
-      - name: Merge the website into the Pages site
+      - name: Verify the Pages site layout
         run: |
-          # The landing page takes the site root; the apt repository keeps
-          # living under /apt and /install.sh stays where it is.
-          cp -r site/. pages/
-          test -f pages/index.html
           test -f pages/apt/dists/stable/Release
           test -f pages/install.sh
           echo "Pages site root:"
@@ -774,8 +730,6 @@ jobs:
       - name: Download every packaging artifact
         uses: actions/download-artifact@v4
         with:
-          # The website artifact is only consumed by the Pages job.
-          pattern: "!website-dist"
           merge-multiple: true
           path: release
 

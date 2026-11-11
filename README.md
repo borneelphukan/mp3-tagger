@@ -165,13 +165,8 @@ repository is republished to GitHub Pages on non-pull-request runs.
 
 ## Website
 
-The product landing page lives in `website/` (React + TypeScript + Tailwind CSS v4,
-built with Vite). See `website/README.md` for the dev commands.
-
-The build workflow builds it on every run and merges the output into the GitHub
-Pages site, so the landing page is served at the site root while the apt
-repository keeps living under `/apt` and `/install.sh`. The displayed version
-comes from the `Cargo.toml` version passed as `VITE_APP_VERSION`.
+The apt repository is republished to GitHub Pages on non-pull-request runs of
+the release workflow. Pages hosts only the apt repository and `install.sh`.
 
 > **First deployment note:** the workflow enables GitHub Pages automatically via
 > `actions/configure-pages` with `enablement: true`. If that ever fails (e.g. a
